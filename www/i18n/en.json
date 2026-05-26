@@ -942,6 +942,8 @@
   "edt_conf_color_luminanceGain_title": "Brightness/luminance",
   "edt_conf_color_luminanceGain_expl": "Luminance gain (HSV).",
   "edt_conf_enum_multicolor_advanced": "Multicolor: precise average color for each LED zone, corrected for image gamma",
+  "edt_conf_enum_multicolor_advanced_vivid": "Multicolor vivid: saturation-aware color for anime and games",
+  "edt_conf_enum_multicolor_advanced_dominant": "Multicolor dominant: strongest visible color for grouped lamps",
   "edt_append_mode": "mode",
   "remote_maptype_label_advanced": "Advanced squared",
   "remote_maptype_label_weighted": "Advanced weighted squared",

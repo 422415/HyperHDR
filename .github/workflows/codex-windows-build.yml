@@ -1,0 +1,83 @@
+name: Codex Windows Build
+
+on:
+  push:
+    branches:
+      - master
+      - 'codex/**'
+  workflow_dispatch:
+
+env:
+  USE_CACHE: true
+  RESET_CACHE: false
+
+jobs:
+  windows:
+    name: Windows x64 installer
+    runs-on: windows-2025
+    env:
+      MSVC: 2022
+      QT_VERSION: 6.8.3
+      TOOLKIT_DIR: "${{ github.workspace }}\\Toolkit"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+        with:
+          submodules: true
+
+      - name: Cache toolkit
+        uses: actions/cache@v5.0.5
+        id: cache-toolkit-windows
+        with:
+          path: ${{ env.TOOLKIT_DIR }}
+          key: ${{ runner.os }}-Toolkit-Qt.${{ env.QT_VERSION }}-NSIS-TurboJPEG
+
+      - name: Python for Qt installer
+        if: steps.cache-toolkit-windows.outputs.cache-hit != 'true'
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+
+      - name: Install toolkit
+        if: steps.cache-toolkit-windows.outputs.cache-hit != 'true'
+        shell: powershell
+        run: |
+          Invoke-WebRequest -Method Get -Uri https://github.com/libjpeg-turbo/libjpeg-turbo/releases/download/3.0.3/libjpeg-turbo-3.0.3-vc64.exe -OutFile turbojpeg.exe -UseBasicParsing
+          Start-Process -Wait turbojpeg.exe -ArgumentList "/S","/D=$env:TOOLKIT_DIR\libjpeg-turbo64"
+          Invoke-WebRequest -UserAgent "Wget" -Uri "https://prdownloads.sourceforge.net/nsis/nsis-3.11-setup.exe" -OutFile nsis.exe
+          Start-Process -Wait nsis.exe -ArgumentList "/S","/D=$env:TOOLKIT_DIR\nsis"
+          New-Item -ItemType Directory -Force -Path "$env:TOOLKIT_DIR\ccache" | Out-Null
+          Invoke-WebRequest -Method Get -Uri https://github.com/ccache/ccache/releases/download/v4.12/ccache-4.12-windows-x86_64.zip -OutFile "$env:TOOLKIT_DIR\ccache\ccache.zip" -UseBasicParsing
+          pip install aqtinstall
+          aqt install-qt -O "$env:TOOLKIT_DIR\Qt" windows desktop $env:QT_VERSION "win64_msvc${env:MSVC}_64" -m qtserialport
+
+      - name: Restore toolkit
+        shell: cmd
+        run: |
+          7z e "%TOOLKIT_DIR%\ccache\ccache.zip" -o.\build *.exe -r
+          echo %TOOLKIT_DIR%\nsis>> %GITHUB_PATH%
+
+      - name: Cache ccache
+        if: env.USE_CACHE == 'true'
+        uses: actions/cache@v5.0.5
+        with:
+          path: build/.ccache
+          key: ${{ runner.os }}-ccache-${{ github.run_id }}
+          restore-keys: ${{ runner.os }}-ccache
+
+      - name: Build package
+        env:
+          PLATFORM: windows
+          VCINSTALLDIR: 'C:/Program Files/Microsoft Visual Studio/${{ env.MSVC }}/Enterprise/VC'
+          CMAKE_PREFIX_PATH: "${{ env.TOOLKIT_DIR }}\\Qt\\${{ env.QT_VERSION }}\\msvc${{ env.MSVC }}_64\\lib\\cmake\\"
+          USE_CCACHE: ${{ env.USE_CACHE }}
+        shell: bash
+        run: |
+          "${{ env.VCINSTALLDIR }}/Auxiliary/Build/vcvars64.bat"
+          ./build.sh
+
+      - name: Upload Windows installer
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: HyperHDR-Windows-x64-installer
+          path: build/Hyper*.exe

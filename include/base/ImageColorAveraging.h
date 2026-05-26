@@ -42,6 +42,8 @@ namespace hyperhdr
 	private:
 		void getUnicolorForLeds(std::vector<linalg::aliases::float3>& ledColors, const Image<ColorRgb>& image) const;
 		void getMulticolorForLeds(std::vector<linalg::aliases::float3>& ledColors, const Image<ColorRgb>& image) const;
+		void getVividMulticolorForLeds(std::vector<linalg::aliases::float3>& ledColors, const Image<ColorRgb>& image) const;
+		void getDominantMulticolorForLeds(std::vector<linalg::aliases::float3>& ledColors, const Image<ColorRgb>& image) const;
 
 		const unsigned _width;
 		const unsigned _height;
@@ -54,6 +56,8 @@ namespace hyperhdr
 		std::map<int, std::vector<uint32_t>> _colorGroups;
 
 		linalg::aliases::float3 calcMulticolorForLeds(const Image<ColorRgb>& image, const std::vector<uint32_t>& colors) const;
+		linalg::aliases::float3 calcVividMulticolorForLeds(const Image<ColorRgb>& image, const std::vector<uint32_t>& colors) const;
+		linalg::aliases::float3 calcDominantMulticolorForLeds(const Image<ColorRgb>& image, const std::vector<uint32_t>& colors) const;
 		linalg::aliases::float3 calcUnicolorForLeds(const Image<ColorRgb>& image) const;
 	};
 }

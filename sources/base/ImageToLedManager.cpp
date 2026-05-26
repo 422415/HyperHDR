@@ -58,6 +58,12 @@ void ImageToLedManager::registerProcessingUnit(
 // global transform method
 int ImageToLedManager::mappingTypeToInt(const QString& mappingType)
 {
+	if (mappingType == "advanced_dominant")
+		return 3;
+
+	if (mappingType == "advanced_vivid")
+		return 2;
+
 	if (mappingType == "unicolor_mean")
 		return 1;
 
@@ -66,6 +72,11 @@ int ImageToLedManager::mappingTypeToInt(const QString& mappingType)
 // global transform method
 QString ImageToLedManager::mappingTypeToStr(int mappingType)
 {
+	if (mappingType == 3)
+		return "advanced_dominant";
+
+	if (mappingType == 2)
+		return "advanced_vivid";
 
 	if (mappingType == 1)
 		return "unicolor_mean";

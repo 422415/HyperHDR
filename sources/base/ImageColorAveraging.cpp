@@ -30,6 +30,7 @@
 #include <infinite-color-engine/InfiniteProcessing.h>
 
 #include <algorithm>
+#include <array>
 #include <ranges>
 #include <iterator>
 
@@ -37,6 +38,35 @@
 
 using namespace hyperhdr;
 using namespace linalg::aliases;
+
+namespace
+{
+	constexpr int DOMINANT_HUE_BINS = 24;
+
+	int colorToHueBin(const float3& color, float maxComponent, float chroma)
+	{
+		if (chroma <= 0.0001f)
+			return 0;
+
+		float hue = 0.0f;
+		if (maxComponent == color.x)
+		{
+			hue = (color.y - color.z) / chroma;
+			if (hue < 0.0f)
+				hue += 6.0f;
+		}
+		else if (maxComponent == color.y)
+		{
+			hue = ((color.z - color.x) / chroma) + 2.0f;
+		}
+		else
+		{
+			hue = ((color.x - color.y) / chroma) + 4.0f;
+		}
+
+		return std::clamp(static_cast<int>((hue / 6.0f) * DOMINANT_HUE_BINS), 0, DOMINANT_HUE_BINS - 1);
+	}
+}
 
 ImageColorAveraging::ImageColorAveraging(
 				const LoggerName& _log,
@@ -183,6 +213,8 @@ void ImageColorAveraging::process(std::vector<float3>& ledColors, const Image<Co
 	switch (_mappingType)
 	{
 		case 1: getUnicolorForLeds(ledColors, image); break;
+		case 2: getVividMulticolorForLeds(ledColors, image); break;
+		case 3: getDominantMulticolorForLeds(ledColors, image); break;
 		default: getMulticolorForLeds(ledColors, image);
 	}
 
@@ -213,6 +245,22 @@ void ImageColorAveraging::getMulticolorForLeds(std::vector<float3>& ledColors, c
 	}
 }
 
+void ImageColorAveraging::getVividMulticolorForLeds(std::vector<float3>& ledColors, const Image<ColorRgb>& image) const
+{
+	for (auto colors = _colorsMap.begin(); colors != _colorsMap.end(); ++colors)
+	{
+		ledColors.push_back(calcVividMulticolorForLeds(image, *colors));
+	}
+}
+
+void ImageColorAveraging::getDominantMulticolorForLeds(std::vector<float3>& ledColors, const Image<ColorRgb>& image) const
+{
+	for (auto colors = _colorsMap.begin(); colors != _colorsMap.end(); ++colors)
+	{
+		ledColors.push_back(calcDominantMulticolorForLeds(image, *colors));
+	}
+}
+
 float3 ImageColorAveraging::calcMulticolorForLeds(const Image<ColorRgb>& image, const std::vector<uint32_t>& colors) const
 {
 	if (colors.empty())
@@ -232,6 +280,109 @@ float3 ImageColorAveraging::calcMulticolorForLeds(const Image<ColorRgb>& image, 
 	auto averageLinear = (static_cast<float3>(sumLinear) / static_cast<float>(colors.size())) / 65535.0f;
 
 	return averageLinear;
+}
+
+float3 ImageColorAveraging::calcVividMulticolorForLeds(const Image<ColorRgb>& image, const std::vector<uint32_t>& colors) const
+{
+	if (colors.empty())
+	{
+		return float3{ 0, 0, 0 };
+	}
+
+	const uint8_t* imgData = image.rawMem();
+	float3 sumLinear(0, 0, 0);
+	float sumWeight = 0.0f;
+
+	for (const uint32_t colorOffset : colors)
+	{
+		const byte3 nonlinear(imgData[colorOffset], imgData[colorOffset + 1], imgData[colorOffset + 2]);
+		const float3 nonlinear01 = static_cast<float3>(nonlinear) / 255.0f;
+		const float maxComponent = linalg::maxelem(nonlinear01);
+		const float minComponent = linalg::minelem(nonlinear01);
+		const float chroma = maxComponent - minComponent;
+		const float saturation = (maxComponent > 0.0001f) ? chroma / maxComponent : 0.0f;
+		const float luma = 0.2126f * nonlinear01.x + 0.7152f * nonlinear01.y + 0.0722f * nonlinear01.z;
+		const float visible = std::clamp((luma - 0.025f) / 0.18f, 0.0f, 1.0f);
+		const float weight = 0.25f + 0.75f * visible + 3.0f * saturation * saturation * visible;
+
+		sumLinear += (static_cast<float3>(InfiniteProcessing::srgbNonlinearToLinear(nonlinear)) / 65535.0f) * weight;
+		sumWeight += weight;
+	}
+
+	return (sumWeight > 0.0001f) ? sumLinear / sumWeight : float3{ 0, 0, 0 };
+}
+
+float3 ImageColorAveraging::calcDominantMulticolorForLeds(const Image<ColorRgb>& image, const std::vector<uint32_t>& colors) const
+{
+	if (colors.empty())
+	{
+		return float3{ 0, 0, 0 };
+	}
+
+	const uint8_t* imgData = image.rawMem();
+	std::array<float3, DOMINANT_HUE_BINS> hueSums{};
+	std::array<float, DOMINANT_HUE_BINS> hueWeights{};
+	float3 neutralSum(0, 0, 0);
+	float neutralWeight = 0.0f;
+	float totalHueWeight = 0.0f;
+
+	for (const uint32_t colorOffset : colors)
+	{
+		const byte3 nonlinear(imgData[colorOffset], imgData[colorOffset + 1], imgData[colorOffset + 2]);
+		const float3 nonlinear01 = static_cast<float3>(nonlinear) / 255.0f;
+		const float maxComponent = linalg::maxelem(nonlinear01);
+		const float minComponent = linalg::minelem(nonlinear01);
+		const float chroma = maxComponent - minComponent;
+		const float saturation = (maxComponent > 0.0001f) ? chroma / maxComponent : 0.0f;
+		const float luma = 0.2126f * nonlinear01.x + 0.7152f * nonlinear01.y + 0.0722f * nonlinear01.z;
+		const float visible = std::clamp((luma - 0.025f) / 0.18f, 0.0f, 1.0f);
+		const float3 linear = static_cast<float3>(InfiniteProcessing::srgbNonlinearToLinear(nonlinear)) / 65535.0f;
+
+		if (saturation > 0.08f)
+		{
+			const float hueWeight = visible * maxComponent * saturation * saturation;
+			const int hueBin = colorToHueBin(nonlinear01, maxComponent, chroma);
+			hueSums[hueBin] += linear * hueWeight;
+			hueWeights[hueBin] += hueWeight;
+			totalHueWeight += hueWeight;
+		}
+
+		const float neutralAmount = 1.0f - saturation;
+		const float currentNeutralWeight = visible * maxComponent * neutralAmount * neutralAmount * 0.35f;
+		neutralSum += linear * currentNeutralWeight;
+		neutralWeight += currentNeutralWeight;
+	}
+
+	float3 bestHueSum(0, 0, 0);
+	float bestHueWeight = 0.0f;
+	for (int i = 0; i < DOMINANT_HUE_BINS; ++i)
+	{
+		const int prev = (i + DOMINANT_HUE_BINS - 1) % DOMINANT_HUE_BINS;
+		const int next = (i + 1) % DOMINANT_HUE_BINS;
+		const float candidateWeight = hueWeights[prev] + hueWeights[i] + hueWeights[next];
+		if (candidateWeight > bestHueWeight)
+		{
+			bestHueWeight = candidateWeight;
+			bestHueSum = hueSums[prev] + hueSums[i] + hueSums[next];
+		}
+	}
+
+	const bool hasClearDominantHue =
+		bestHueWeight > 0.0001f &&
+		bestHueWeight >= neutralWeight * 0.35f &&
+		(totalHueWeight <= 0.0001f || (bestHueWeight / totalHueWeight) >= 0.18f);
+
+	if (hasClearDominantHue)
+	{
+		return bestHueSum / bestHueWeight;
+	}
+
+	if (neutralWeight > 0.0001f)
+	{
+		return neutralSum / neutralWeight;
+	}
+
+	return calcVividMulticolorForLeds(image, colors);
 }
 
 float3 ImageColorAveraging::calcUnicolorForLeds(const Image<ColorRgb>& image) const

@@ -1,7 +1,7 @@
 name: HyperHDR CI Build
 
 on:
-  push:
+  workflow_dispatch:
 
 env:
     USE_CACHE: ${{ vars.USE_CACHE && vars.USE_CACHE || true }}
