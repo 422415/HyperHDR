@@ -68,6 +68,7 @@ Grabber::Grabber(const QString& configurationPath, const QString& grabberName)
 	, _initialized(false)
 	, _fpsSoftwareDecimation(1)
 	, _hardware(false)
+	, _sdr10BitCapture(false)
 	, _actualVideoFormat(PixelFormat::NO_CHANGE)
 	, _actualWidth(0)
 	, _actualHeight(0)
@@ -246,6 +247,28 @@ void Grabber::enableHardwareAcceleration(bool hardware)
 		else
 		{
 			Info(_log, "Delayed restart of the grabber due to change of the hardware acceleration");
+			_restartNeeded = true;
+		}
+	}
+}
+
+void Grabber::enableSdr10BitCapture(bool enabled)
+{
+	if (_sdr10BitCapture != enabled)
+	{
+		_sdr10BitCapture = enabled;
+
+		Debug(_log, "Set experimental SDR 10-bit capture to {:s}", _sdr10BitCapture ? "enabled" : "disabled");
+
+		if (_initialized && !_blocked)
+		{
+			Debug(_log, "Restarting video grabber");
+			uninit();
+			start();
+		}
+		else
+		{
+			Info(_log, "Delayed restart of the grabber due to change of experimental SDR 10-bit capture");
 			_restartNeeded = true;
 		}
 	}

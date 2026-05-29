@@ -54,6 +54,20 @@
 			"required" : true,
 			"propertyOrder" : 24
 		},
+		"sdr10BitCapture" :
+		{
+			"type" : "boolean",
+			"format": "checkbox",
+			"title" : "edt_conf_sdr10bit_capture_title",
+			"default" : false,
+			"required" : true,
+			"options": {
+				"dependencies": {
+					"hardware": true
+				}
+			},
+			"propertyOrder" : 25
+		},
 		"monitor_nits" :
 		{
 			"type" : "integer",
@@ -69,7 +83,7 @@
 					"hardware": true
 				}
 			},
-			"propertyOrder" : 25
+			"propertyOrder" : 26
 		},
 		"reorder_displays" :
 		{
@@ -85,7 +99,7 @@
 					"hardware": true
 				}
 			},
-			"propertyOrder" : 26
+			"propertyOrder" : 27
 		},
 		"cropLeft" :
 		{

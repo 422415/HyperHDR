@@ -412,6 +412,24 @@ bool DxGrabber::initDirectX(QString selectedDeviceName)
 							}
 						}
 
+						if (_hardware && !display->wideGamut && _sdr10BitCapture)
+						{
+							Info(_log, "Trying experimental SDR 10-bit capture format");
+
+							DXGI_FORMAT deepSdrFormat = DXGI_FORMAT_R10G10B10A2_UNORM;
+							status = pOutput6->DuplicateOutput1(_d3dDevice, 0, 1, &deepSdrFormat, &display->d3dDuplicate);
+
+							if (CHECK(status))
+							{
+								display->sdr10Bit = true;
+								Info(_log, "Using experimental SDR 10-bit format");
+							}
+							else
+							{
+								Warning(_log, "No support for experimental SDR DXGI_FORMAT_R10G10B10A2_UNORM. Fallback to BGRA");
+							}
+						}
+
 						if (!CHECK(status))
 						{
 							Info(_log, "Using BGRA format");
@@ -440,7 +458,7 @@ bool DxGrabber::initDirectX(QString selectedDeviceName)
 								display->actualWidth = targetSizeX;
 								display->actualHeight = targetSizeY;
 
-								if (!display->wideGamut)
+								if (!display->wideGamut && !display->sdr10Bit)
 								{
 									int maxSize = std::max(display->actualWidth, display->actualHeight);
 

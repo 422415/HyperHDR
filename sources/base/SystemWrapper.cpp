@@ -161,6 +161,8 @@ void SystemWrapper::handleSettingsUpdate(settings::type type, const QJsonDocumen
 
 			_grabber->enableHardwareAcceleration(obj["hardware"].toBool(false));
 
+			_grabber->enableSdr10BitCapture(obj["sdr10BitCapture"].toBool(false));
+
 			_grabber->setMonitorNits(obj["monitor_nits"].toInt(200));
 
 			_grabber->setReorderDisplays(obj["reorder_displays"].toInt(0));			

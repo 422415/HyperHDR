@@ -84,6 +84,8 @@ public:
 
 	void enableHardwareAcceleration(bool hardware);
 
+	void enableSdr10BitCapture(bool enabled);
+
 	void setMonitorNits(int nits);
 
 	void setReorderDisplays(int order);
@@ -266,6 +268,7 @@ protected:
 	bool		_initialized;
 	int			_fpsSoftwareDecimation;
 	bool		_hardware;
+	bool		_sdr10BitCapture;
 
 	PixelFormat _actualVideoFormat;
 	int			_actualWidth, _actualHeight, _actualFPS;

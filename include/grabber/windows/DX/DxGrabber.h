@@ -44,6 +44,7 @@ struct DisplayHandle
 	QString name;
 	int warningCounter = DisplayHandle::WARNING_COUNT;
 	bool wideGamut = false;
+	bool sdr10Bit = false;
 	int actualDivide = -1, actualWidth = 0, actualHeight = 0;
 	uint targetMonitorNits = 0;
 	ID3D11Texture2D* d3dConvertTexture = nullptr;

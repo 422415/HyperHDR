@@ -1230,6 +1230,8 @@
   "controlled_by_smoothing_or_led_driver": "controlled by Smoothing or driver",
   "edt_conf_hardware_title": "Enable hardware acceleration",
   "edt_conf_hardware_expl": "Enable hardware acceleration, for example: pixel and vertex shaders on Windows or EGL/DMA for Pipewire on Linux.",
+  "edt_conf_sdr10bit_capture_title": "Experimental SDR 10-bit capture",
+  "edt_conf_sdr10bit_capture_expl": "DirectX only. When enabled, HyperHDR asks Windows for 10-bit SDR screen frames first and falls back to the standard BGRA path if unsupported. Use only with SDR desktop output and hardware acceleration enabled.",
   "edt_conf_monitor_nits_title": "HDR brightness correction",
   "edt_conf_monitor_nits_expl": "SDR target brightness used for HDR to SDR conversion. If 0, it disables hardware color conversion while maintaining accelerated scaling.",
   "edt_append_nits": "nits",
