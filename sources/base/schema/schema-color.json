@@ -102,6 +102,109 @@
 				}
 			}
 		},
+		"dominant_color_oklch_neutral_scene_protection" :
+		{
+			"type" : "boolean",
+			"format": "checkbox",
+			"title" : "edt_conf_dominant_oklch_neutral_scene_protection_title",
+			"default" : true,
+			"required" : true,
+			"propertyOrder" : 8,
+			"options" : {
+				"dependencies": {
+					"imageToLedMappingType": "advanced_dominant_oklch"
+				}
+			}
+		},
+		"dominant_color_oklch_neutral_scene_min_coverage" :
+		{
+			"type" : "number",
+			"format": "stepper",
+			"step" : 0.01,
+			"title" : "edt_conf_dominant_oklch_neutral_scene_min_coverage_title",
+			"required" : true,
+			"minimum" : 0,
+			"maximum": 1.0,
+			"default" : 0.75,
+			"propertyOrder" : 9,
+			"options" : {
+				"dependencies": {
+					"imageToLedMappingType": "advanced_dominant_oklch",
+					"dominant_color_oklch_neutral_scene_protection": true
+				}
+			}
+		},
+		"dominant_color_oklch_neutral_scene_max_saturation" :
+		{
+			"type" : "number",
+			"format": "stepper",
+			"step" : 0.01,
+			"title" : "edt_conf_dominant_oklch_neutral_scene_max_saturation_title",
+			"required" : true,
+			"minimum" : 0,
+			"maximum": 1.0,
+			"default" : 0.12,
+			"propertyOrder" : 10,
+			"options" : {
+				"dependencies": {
+					"imageToLedMappingType": "advanced_dominant_oklch",
+					"dominant_color_oklch_neutral_scene_protection": true
+				}
+			}
+		},
+		"dominant_color_oklch_neutral_scene_min_luma" :
+		{
+			"type" : "number",
+			"format": "stepper",
+			"step" : 0.01,
+			"title" : "edt_conf_dominant_oklch_neutral_scene_min_luma_title",
+			"required" : true,
+			"minimum" : 0,
+			"maximum": 1.0,
+			"default" : 0.45,
+			"propertyOrder" : 11,
+			"options" : {
+				"dependencies": {
+					"imageToLedMappingType": "advanced_dominant_oklch",
+					"dominant_color_oklch_neutral_scene_protection": true
+				}
+			}
+		},
+		"dominant_color_oklch_min_colored_coverage" :
+		{
+			"type" : "number",
+			"format": "stepper",
+			"step" : 0.01,
+			"title" : "edt_conf_dominant_oklch_min_colored_coverage_title",
+			"required" : true,
+			"minimum" : 0,
+			"maximum": 1.0,
+			"default" : 0.08,
+			"propertyOrder" : 12,
+			"options" : {
+				"dependencies": {
+					"imageToLedMappingType": "advanced_dominant_oklch",
+					"dominant_color_oklch_neutral_scene_protection": true
+				}
+			}
+		},
+		"dominant_color_oklch_dominant_brightness_blend" :
+		{
+			"type" : "number",
+			"format": "stepper",
+			"step" : 0.05,
+			"title" : "edt_conf_dominant_oklch_dominant_brightness_blend_title",
+			"required" : true,
+			"minimum" : 0,
+			"maximum": 1.0,
+			"default" : 0.70,
+			"propertyOrder" : 13,
+			"options" : {
+				"dependencies": {
+					"imageToLedMappingType": "advanced_dominant_oklch"
+				}
+			}
+		},
 		"channelAdjustment" :
 		{
 			"type" : "array",

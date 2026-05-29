@@ -24,6 +24,12 @@ namespace hyperhdr
 		float brightNeutralMinLuma = 0.50f;
 		float brightNeutralMaxSaturation = 0.20f;
 		float darkSceneMaxLuma = 0.35f;
+		bool oklchNeutralSceneProtection = true;
+		float oklchNeutralSceneMinCoverage = 0.75f;
+		float oklchNeutralSceneMaxSaturation = 0.12f;
+		float oklchNeutralSceneMinLuma = 0.45f;
+		float oklchMinColoredCoverage = 0.08f;
+		float oklchDominantBrightnessBlend = 0.70f;
 
 		bool operator!=(const DominantColorConfig& other) const
 		{
@@ -31,7 +37,13 @@ namespace hyperhdr
 				brightNeutralMaxCoverage != other.brightNeutralMaxCoverage ||
 				brightNeutralMinLuma != other.brightNeutralMinLuma ||
 				brightNeutralMaxSaturation != other.brightNeutralMaxSaturation ||
-				darkSceneMaxLuma != other.darkSceneMaxLuma;
+				darkSceneMaxLuma != other.darkSceneMaxLuma ||
+				oklchNeutralSceneProtection != other.oklchNeutralSceneProtection ||
+				oklchNeutralSceneMinCoverage != other.oklchNeutralSceneMinCoverage ||
+				oklchNeutralSceneMaxSaturation != other.oklchNeutralSceneMaxSaturation ||
+				oklchNeutralSceneMinLuma != other.oklchNeutralSceneMinLuma ||
+				oklchMinColoredCoverage != other.oklchMinColoredCoverage ||
+				oklchDominantBrightnessBlend != other.oklchDominantBrightnessBlend;
 		}
 	};
 

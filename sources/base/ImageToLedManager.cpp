@@ -130,6 +130,12 @@ void ImageToLedManager::handleSettingsUpdate(settings::type type, const QJsonDoc
 		dominantColorConfig.brightNeutralMinLuma = static_cast<float>(std::clamp(obj["dominant_color_bright_neutral_min_luma"].toDouble(0.50), 0.0, 1.0));
 		dominantColorConfig.brightNeutralMaxSaturation = static_cast<float>(std::clamp(obj["dominant_color_bright_neutral_max_saturation"].toDouble(0.20), 0.0, 1.0));
 		dominantColorConfig.darkSceneMaxLuma = static_cast<float>(std::clamp(obj["dominant_color_dark_scene_max_luma"].toDouble(0.35), 0.0, 1.0));
+		dominantColorConfig.oklchNeutralSceneProtection = obj["dominant_color_oklch_neutral_scene_protection"].toBool(true);
+		dominantColorConfig.oklchNeutralSceneMinCoverage = static_cast<float>(std::clamp(obj["dominant_color_oklch_neutral_scene_min_coverage"].toDouble(0.75), 0.0, 1.0));
+		dominantColorConfig.oklchNeutralSceneMaxSaturation = static_cast<float>(std::clamp(obj["dominant_color_oklch_neutral_scene_max_saturation"].toDouble(0.12), 0.0, 1.0));
+		dominantColorConfig.oklchNeutralSceneMinLuma = static_cast<float>(std::clamp(obj["dominant_color_oklch_neutral_scene_min_luma"].toDouble(0.45), 0.0, 1.0));
+		dominantColorConfig.oklchMinColoredCoverage = static_cast<float>(std::clamp(obj["dominant_color_oklch_min_colored_coverage"].toDouble(0.08), 0.0, 1.0));
+		dominantColorConfig.oklchDominantBrightnessBlend = static_cast<float>(std::clamp(obj["dominant_color_oklch_dominant_brightness_blend"].toDouble(0.70), 0.0, 1.0));
 		setDominantColorConfig(dominantColorConfig);
 	}
 }

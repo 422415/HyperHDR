@@ -48,7 +48,6 @@ namespace
 	constexpr float OKLCH_MIN_CHROMA = 0.015f;
 	constexpr float OKLCH_CHROMA_REFERENCE = 0.12f;
 	constexpr float OKLCH_COLORFULNESS_BOOST = 1.15f;
-	constexpr float OKLCH_SCENE_LIGHTNESS_BLEND = 0.65f;
 	constexpr float OKLCH_MIN_DOMINANT_SHARE = 0.16f;
 	constexpr float OKLCH_MIN_HUE_COHERENCE = 0.18f;
 
@@ -525,6 +524,9 @@ float3 ImageColorAveraging::calcDominantOklchMulticolorForLeds(const Image<Color
 	float sceneLightnessWeight = 0.0f;
 	float3 ambientSum(0, 0, 0);
 	float ambientWeight = 0.0f;
+	size_t consideredPixelCount = 0;
+	size_t neutralScenePixelCount = 0;
+	size_t coloredScenePixelCount = 0;
 
 	for (const uint32_t colorOffset : colors)
 	{
@@ -541,11 +543,22 @@ float3 ImageColorAveraging::calcDominantOklchMulticolorForLeds(const Image<Color
 			continue;
 		}
 
+		consideredPixelCount++;
+
 		const float visible = std::clamp((luma - 0.025f) / 0.18f, 0.0f, 1.0f);
 		const float3 linear = static_cast<float3>(InfiniteProcessing::srgbNonlinearToLinear(nonlinear)) / 65535.0f;
 		const float3 oklab = ColorSpaceMath::linear_rgb_to_oklab(linear);
 		const float oklabChroma = std::sqrt(oklab.y * oklab.y + oklab.z * oklab.z);
 		const float sceneWeight = 0.15f + 0.85f * visible;
+
+		if (saturation <= _dominantColorConfig.oklchNeutralSceneMaxSaturation && luma >= _dominantColorConfig.oklchNeutralSceneMinLuma)
+		{
+			neutralScenePixelCount++;
+		}
+		else if (oklabChroma > OKLCH_MIN_CHROMA && saturation > _dominantColorConfig.oklchNeutralSceneMaxSaturation && visible > 0.0f)
+		{
+			coloredScenePixelCount++;
+		}
 
 		ambientSum += linear;
 		ambientWeight += 1.0f;
@@ -566,6 +579,18 @@ float3 ImageColorAveraging::calcDominantOklchMulticolorForLeds(const Image<Color
 			hueSinSums[hueBin] += std::sin(hue) * hueWeight;
 			totalHueWeight += hueWeight;
 		}
+	}
+
+	const float neutralSceneCoverage = (consideredPixelCount > 0) ? static_cast<float>(neutralScenePixelCount) / static_cast<float>(consideredPixelCount) : 0.0f;
+	const float coloredSceneCoverage = (consideredPixelCount > 0) ? static_cast<float>(coloredScenePixelCount) / static_cast<float>(consideredPixelCount) : 0.0f;
+	const bool protectNeutralScene =
+		_dominantColorConfig.oklchNeutralSceneProtection &&
+		neutralSceneCoverage >= _dominantColorConfig.oklchNeutralSceneMinCoverage &&
+		coloredSceneCoverage <= _dominantColorConfig.oklchMinColoredCoverage;
+
+	if (protectNeutralScene && ambientWeight > 0.0001f)
+	{
+		return ambientSum / ambientWeight;
 	}
 
 	float bestHueWeight = 0.0f;
@@ -602,7 +627,8 @@ float3 ImageColorAveraging::calcDominantOklchMulticolorForLeds(const Image<Color
 		const float dominantHue = std::atan2(bestHueSinSum, bestHueCosSum);
 		const float sceneLightness = (sceneLightnessWeight > 0.0001f) ? sceneLightnessSum / sceneLightnessWeight : bestHueLightnessSum / bestHueWeight;
 		const float dominantLightness = bestHueLightnessSum / bestHueWeight;
-		const float targetLightness = sceneLightness * OKLCH_SCENE_LIGHTNESS_BLEND + dominantLightness * (1.0f - OKLCH_SCENE_LIGHTNESS_BLEND);
+		const float dominantBrightnessBlend = std::clamp(_dominantColorConfig.oklchDominantBrightnessBlend, 0.0f, 1.0f);
+		const float targetLightness = sceneLightness * (1.0f - dominantBrightnessBlend) + dominantLightness * dominantBrightnessBlend;
 		const float targetChroma = std::clamp((bestHueChromaSum / bestHueWeight) * OKLCH_COLORFULNESS_BOOST, 0.0f, 0.34f);
 		const float3 oklab{
 			std::clamp(targetLightness, 0.0f, 1.0f),
