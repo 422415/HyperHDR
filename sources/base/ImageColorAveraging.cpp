@@ -60,6 +60,12 @@ namespace
 		};
 	}
 
+	float smoothStep(float edge0, float edge1, float value)
+	{
+		const float t = std::clamp((value - edge0) / (edge1 - edge0), 0.0f, 1.0f);
+		return t * t * (3.0f - 2.0f * t);
+	}
+
 	bool isBrightNeutralHighlight(const DominantColorConfig& config, float maxComponent, float saturation, float luma)
 	{
 		return luma >= config.brightNeutralMinLuma &&
@@ -519,6 +525,7 @@ float3 ImageColorAveraging::calcDominantOklchMulticolorForLeds(const Image<Color
 	std::array<float, DOMINANT_HUE_BINS> hueLightnessSums{};
 	std::array<float, DOMINANT_HUE_BINS> hueCosSums{};
 	std::array<float, DOMINANT_HUE_BINS> hueSinSums{};
+	std::array<float3, DOMINANT_HUE_BINS> hueLinearSums{};
 	float totalHueWeight = 0.0f;
 	float sceneLightnessSum = 0.0f;
 	float sceneLightnessWeight = 0.0f;
@@ -577,6 +584,7 @@ float3 ImageColorAveraging::calcDominantOklchMulticolorForLeds(const Image<Color
 			hueLightnessSums[hueBin] += oklab.x * hueWeight;
 			hueCosSums[hueBin] += std::cos(hue) * hueWeight;
 			hueSinSums[hueBin] += std::sin(hue) * hueWeight;
+			hueLinearSums[hueBin] += linear * hueWeight;
 			totalHueWeight += hueWeight;
 		}
 	}
@@ -599,6 +607,7 @@ float3 ImageColorAveraging::calcDominantOklchMulticolorForLeds(const Image<Color
 	float bestHueLightnessSum = 0.0f;
 	float bestHueCosSum = 0.0f;
 	float bestHueSinSum = 0.0f;
+	float3 bestHueLinearSum(0, 0, 0);
 
 	for (int i = 0; i < DOMINANT_HUE_BINS; ++i)
 	{
@@ -613,6 +622,7 @@ float3 ImageColorAveraging::calcDominantOklchMulticolorForLeds(const Image<Color
 			bestHueLightnessSum = hueLightnessSums[prev] + hueLightnessSums[i] + hueLightnessSums[next];
 			bestHueCosSum = hueCosSums[prev] + hueCosSums[i] + hueCosSums[next];
 			bestHueSinSum = hueSinSums[prev] + hueSinSums[i] + hueSinSums[next];
+			bestHueLinearSum = hueLinearSums[prev] + hueLinearSums[i] + hueLinearSums[next];
 		}
 	}
 
@@ -631,14 +641,23 @@ float3 ImageColorAveraging::calcDominantOklchMulticolorForLeds(const Image<Color
 		const float dominantLightness = bestHueLightnessSum / bestHueWeight;
 		const float dominantBrightnessBlend = std::clamp(_dominantColorConfig.oklchDominantBrightnessBlend, 0.0f, 1.0f);
 		const float targetLightness = sceneLightness * (1.0f - dominantBrightnessBlend) + dominantLightness * dominantBrightnessBlend;
-		const float targetChroma = std::clamp((bestHueChromaSum / bestHueWeight) * OKLCH_COLORFULNESS_BOOST, 0.0f, 0.34f);
+		const float dominantChroma = bestHueChromaSum / bestHueWeight;
+		const float targetChroma = std::clamp(dominantChroma * OKLCH_COLORFULNESS_BOOST, 0.0f, 0.34f);
 		const float3 oklab{
 			std::clamp(targetLightness, 0.0f, 1.0f),
 			std::cos(dominantHue) * targetChroma,
 			std::sin(dominantHue) * targetChroma
 		};
+		const float3 reconstructed = clampFloat3(ColorSpaceMath::oklab_to_linear_rgb(ColorSpaceMath::clamp_oklab_chroma_to_gamut(oklab)), 0.0f, 1.0f);
+		const float3 sourceAverage = clampFloat3(bestHueLinearSum / bestHueWeight, 0.0f, 1.0f);
 
-		return clampFloat3(ColorSpaceMath::oklab_to_linear_rgb(ColorSpaceMath::clamp_oklab_chroma_to_gamut(oklab)), 0.0f, 1.0f);
+		// Keep perceptual OKLCH reconstruction for midtones, but preserve source pixels for bright or deep saturated colors.
+		const float darkColorPreserve = 1.0f - smoothStep(0.32f, 0.48f, dominantLightness);
+		const float brightColorPreserve = smoothStep(0.58f, 0.76f, dominantLightness);
+		const float saturatedColorConfidence = smoothStep(0.04f, 0.12f, dominantChroma);
+		const float sourcePreserve = std::clamp(std::max(darkColorPreserve, brightColorPreserve) * saturatedColorConfidence, 0.0f, 0.85f);
+
+		return reconstructed * (1.0f - sourcePreserve) + sourceAverage * sourcePreserve;
 	}
 
 	if (ambientWeight > 0.0001f)
