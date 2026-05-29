@@ -42,16 +42,12 @@ using namespace linalg::aliases;
 namespace
 {
 	constexpr int DOMINANT_HUE_BINS = 24;
-	constexpr float DOMINANT_TEXT_LUMA_MIN = 0.50f;
-	constexpr float DOMINANT_TEXT_MAX_COMPONENT_MIN = 0.60f;
-	constexpr float DOMINANT_TEXT_SATURATION_MAX = 0.20f;
-	constexpr float DOMINANT_TEXT_MAX_COVERAGE = 0.12f;
 
-	bool isBrightNeutralHighlight(float maxComponent, float saturation, float luma)
+	bool isBrightNeutralHighlight(const DominantColorConfig& config, float maxComponent, float saturation, float luma)
 	{
-		return luma >= DOMINANT_TEXT_LUMA_MIN &&
-			maxComponent >= DOMINANT_TEXT_MAX_COMPONENT_MIN &&
-			saturation <= DOMINANT_TEXT_SATURATION_MAX;
+		return luma >= config.brightNeutralMinLuma &&
+			maxComponent >= config.brightNeutralMinLuma &&
+			saturation <= config.brightNeutralMaxSaturation;
 	}
 
 	int colorToHueBin(const float3& color, float maxComponent, float chroma)
@@ -88,12 +84,14 @@ ImageColorAveraging::ImageColorAveraging(
 				const unsigned horizontalBorder,
 				const unsigned verticalBorder,
 				const quint8 /*instanceIndex*/,
+				const DominantColorConfig& dominantColorConfig,
 				const std::vector<LedString::Led>& leds)
 	: _width(width)
 	, _height(height)
 	, _sparseProcessing(sparseProcessing)
 	, _horizontalBorder(horizontalBorder)
 	, _verticalBorder(verticalBorder)
+	, _dominantColorConfig(dominantColorConfig)
 	, _colorsMap()
 	, _colorGroups()
 {
@@ -339,6 +337,8 @@ float3 ImageColorAveraging::calcDominantMulticolorForLeds(const Image<ColorRgb>&
 	float ambientWeight = 0.0f;
 	float totalHueWeight = 0.0f;
 	size_t brightNeutralHighlightCount = 0;
+	size_t nonHighlightCount = 0;
+	float nonHighlightLumaSum = 0.0f;
 
 	for (const uint32_t colorOffset : colors)
 	{
@@ -350,15 +350,24 @@ float3 ImageColorAveraging::calcDominantMulticolorForLeds(const Image<ColorRgb>&
 		const float saturation = (maxComponent > 0.0001f) ? chroma / maxComponent : 0.0f;
 		const float luma = 0.2126f * nonlinear01.x + 0.7152f * nonlinear01.y + 0.0722f * nonlinear01.z;
 
-		if (isBrightNeutralHighlight(maxComponent, saturation, luma))
+		if (isBrightNeutralHighlight(_dominantColorConfig, maxComponent, saturation, luma))
 		{
 			brightNeutralHighlightCount++;
 		}
+		else
+		{
+			nonHighlightCount++;
+			nonHighlightLumaSum += luma;
+		}
 	}
 
+	const float brightNeutralHighlightCoverage = static_cast<float>(brightNeutralHighlightCount) / static_cast<float>(colors.size());
+	const float nonHighlightAverageLuma = (nonHighlightCount > 0) ? nonHighlightLumaSum / static_cast<float>(nonHighlightCount) : 1.0f;
 	const bool suppressSparseBrightNeutralHighlights =
+		_dominantColorConfig.brightNeutralSuppression &&
 		brightNeutralHighlightCount > 0 &&
-		(static_cast<float>(brightNeutralHighlightCount) / static_cast<float>(colors.size())) < DOMINANT_TEXT_MAX_COVERAGE;
+		brightNeutralHighlightCoverage <= _dominantColorConfig.brightNeutralMaxCoverage &&
+		nonHighlightAverageLuma <= _dominantColorConfig.darkSceneMaxLuma;
 
 	for (const uint32_t colorOffset : colors)
 	{
@@ -372,7 +381,7 @@ float3 ImageColorAveraging::calcDominantMulticolorForLeds(const Image<ColorRgb>&
 		const float visible = std::clamp((luma - 0.025f) / 0.18f, 0.0f, 1.0f);
 		const float3 linear = static_cast<float3>(InfiniteProcessing::srgbNonlinearToLinear(nonlinear)) / 65535.0f;
 
-		if (suppressSparseBrightNeutralHighlights && isBrightNeutralHighlight(maxComponent, saturation, luma))
+		if (suppressSparseBrightNeutralHighlights && isBrightNeutralHighlight(_dominantColorConfig, maxComponent, saturation, luma))
 		{
 			continue;
 		}

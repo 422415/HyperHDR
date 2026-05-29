@@ -33,6 +33,7 @@ public:
 	static QString mappingTypeToStr(int mappingType);
 
 	void setSparseProcessing(bool sparseProcessing);
+	void setDominantColorConfig(const hyperhdr::DominantColorConfig& config);
 	void processFrame(std::vector<linalg::aliases::float3>& ledColors, const Image<ColorRgb>& frameBuffer);
 
 signals:
@@ -65,4 +66,5 @@ private:
 	std::unique_ptr<hyperhdr::ImageColorAveraging> _colorAveraging;
 	int		_mappingType;
 	bool	_sparseProcessing;
+	hyperhdr::DominantColorConfig _dominantColorConfig;
 };

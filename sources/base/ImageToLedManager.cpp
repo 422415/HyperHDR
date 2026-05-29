@@ -30,6 +30,8 @@
 #include <base/ImageColorAveraging.h>
 #include <blackborder/BlackBorderProcessor.h>
 
+#include <algorithm>
+
 using namespace hyperhdr;
 using namespace linalg::aliases;
 
@@ -49,6 +51,7 @@ void ImageToLedManager::registerProcessingUnit(
 			horizontalBorder,
 			verticalBorder,
 			_instanceIndex,
+			_dominantColorConfig,
 			_ledString.leds());
 	else
 		_colorAveraging = nullptr;
@@ -93,6 +96,7 @@ ImageToLedManager::ImageToLedManager(const LedString& ledString, HyperHdrInstanc
 	, _colorAveraging(nullptr)
 	, _mappingType(0)
 	, _sparseProcessing(false)
+	, _dominantColorConfig()
 {
 	// init
 	handleSettingsUpdate(settings::type::COLOR, hyperhdr->getSetting(settings::type::COLOR));
@@ -113,6 +117,14 @@ void ImageToLedManager::handleSettingsUpdate(settings::type type, const QJsonDoc
 
 		bool newSparse = obj["sparse_processing"].toBool(false);
 		setSparseProcessing(newSparse);
+
+		DominantColorConfig dominantColorConfig;
+		dominantColorConfig.brightNeutralSuppression = obj["dominant_color_bright_neutral_suppression"].toBool(true);
+		dominantColorConfig.brightNeutralMaxCoverage = static_cast<float>(std::clamp(obj["dominant_color_bright_neutral_max_coverage"].toDouble(0.12), 0.0, 1.0));
+		dominantColorConfig.brightNeutralMinLuma = static_cast<float>(std::clamp(obj["dominant_color_bright_neutral_min_luma"].toDouble(0.50), 0.0, 1.0));
+		dominantColorConfig.brightNeutralMaxSaturation = static_cast<float>(std::clamp(obj["dominant_color_bright_neutral_max_saturation"].toDouble(0.20), 0.0, 1.0));
+		dominantColorConfig.darkSceneMaxLuma = static_cast<float>(std::clamp(obj["dominant_color_dark_scene_max_luma"].toDouble(0.35), 0.0, 1.0));
+		setDominantColorConfig(dominantColorConfig);
 	}
 }
 
@@ -177,6 +189,21 @@ void ImageToLedManager::setSparseProcessing(bool sparseProcessing)
 		unsigned height = _colorAveraging->height();
 
 		registerProcessingUnit(width, height, 0, 0);
+	}
+}
+
+void ImageToLedManager::setDominantColorConfig(const DominantColorConfig& config)
+{
+	const bool changed = _dominantColorConfig != config;
+
+	_dominantColorConfig = config;
+
+	if (changed && _colorAveraging != nullptr)
+	{
+		unsigned width = _colorAveraging->width();
+		unsigned height = _colorAveraging->height();
+
+		registerProcessingUnit(width, height, _colorAveraging->horizontalBorder(), _colorAveraging->verticalBorder());
 	}
 }
 

@@ -17,6 +17,24 @@
 
 namespace hyperhdr
 {	
+	struct DominantColorConfig
+	{
+		bool brightNeutralSuppression = true;
+		float brightNeutralMaxCoverage = 0.12f;
+		float brightNeutralMinLuma = 0.50f;
+		float brightNeutralMaxSaturation = 0.20f;
+		float darkSceneMaxLuma = 0.35f;
+
+		bool operator!=(const DominantColorConfig& other) const
+		{
+			return brightNeutralSuppression != other.brightNeutralSuppression ||
+				brightNeutralMaxCoverage != other.brightNeutralMaxCoverage ||
+				brightNeutralMinLuma != other.brightNeutralMinLuma ||
+				brightNeutralMaxSaturation != other.brightNeutralMaxSaturation ||
+				darkSceneMaxLuma != other.darkSceneMaxLuma;
+		}
+	};
+
 	class ImageColorAveraging
 	{
 	public:
@@ -29,6 +47,7 @@ namespace hyperhdr
 			const unsigned horizontalBorder,
 			const unsigned verticalBorder,
 			const quint8 instanceIndex,
+			const DominantColorConfig& dominantColorConfig,
 			const std::vector<LedString::Led>& leds);
 
 		unsigned width() const;
@@ -51,6 +70,7 @@ namespace hyperhdr
 		const unsigned _horizontalBorder;
 		const unsigned _verticalBorder;
 		int _mappingType;
+		DominantColorConfig _dominantColorConfig;
 
 		std::vector<std::vector<uint32_t>> _colorsMap;
 		std::map<int, std::vector<uint32_t>> _colorGroups;

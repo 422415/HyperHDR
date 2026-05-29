@@ -15,6 +15,8 @@ $(document).ready(function() {
 	var twoDPaths = [];
 	var lastFeedFrame = Date.now();
 	var toggleLedsNum = false;
+	var toggleColorDebug = false;
+	var lastLedColors = null;
 
 	CanvasRenderingContext2D.prototype.clear = function(){
 		this.clearRect(0, 0, this.canvas.width, this.canvas.height)
@@ -67,6 +69,7 @@ $(document).ready(function() {
 			$('#vid_btn_2').text($.i18n('main_ledsim_btn_togglelednumber').substring(0,4));
 			$('#vid_btn_3').text($.i18n('main_ledsim_btn_togglelivevideo').substring(0,4));
 			$('#vid_btn_4').text($.i18n('main_ledsim_btn_screenshot').substring(0,4));
+			$('#vid_btn_5').text($.i18n('main_ledsim_btn_toggledebug').substring(0,4));
 		}
 		else
 		{			
@@ -74,6 +77,7 @@ $(document).ready(function() {
 			$('#vid_btn_2').text($.i18n('main_ledsim_btn_togglelednumber'));
 			$('#vid_btn_3').text($.i18n('main_ledsim_btn_togglelivevideo'));
 			$('#vid_btn_4').text($.i18n('main_ledsim_btn_screenshot'));
+			$('#vid_btn_5').text($.i18n('main_ledsim_btn_toggledebug'));
 		}
 	};
 
@@ -231,6 +235,78 @@ $(document).ready(function() {
 
 			cPos += 3;
 		}
+
+		updateColorDebug(colors);
+	};
+
+	function averageColor(colors, firstLed, lastLed)
+	{
+		var red = 0;
+		var green = 0;
+		var blue = 0;
+		var count = 0;
+
+		for (var led = firstLed; led < lastLed; led++)
+		{
+			var pos = led * 3;
+			red += colors[pos];
+			green += colors[pos + 1];
+			blue += colors[pos + 2];
+			count++;
+		}
+
+		return (count > 0) ? [
+			Math.round(red / count),
+			Math.round(green / count),
+			Math.round(blue / count)
+		] : [0, 0, 0];
+	};
+
+	function colorDebugRow(label, rgb)
+	{
+		return '<div style="display:flex;align-items:center;gap:0.35rem;margin-top:0.25rem;">' +
+			'<span style="width:1rem;height:1rem;border:1px solid rgba(255,255,255,0.45);background:rgb(' + rgb.join(',') + ');display:inline-block;"></span>' +
+			'<span style="min-width:5.5rem;">' + label + '</span>' +
+			'<code style="color:#fff;">' + rgb[0] + ', ' + rgb[1] + ', ' + rgb[2] + '</code>' +
+			'</div>';
+	};
+
+	function updateColorDebug(colors)
+	{
+		var panel = $('#leds_color_debug');
+		if (!panel.length)
+			return;
+
+		if (!toggleColorDebug)
+		{
+			panel.hide();
+			return;
+		}
+
+		panel.show();
+
+		if (!colors || colors.length < 3)
+		{
+			panel.html('<strong>' + $.i18n('main_ledsim_debug_title') + '</strong><br/><span>' + $.i18n('main_ledsim_debug_waiting') + '</span>');
+			return;
+		}
+
+		var ledCount = Math.floor(colors.length / 3);
+		var rows = '<strong>' + $.i18n('main_ledsim_debug_title') + '</strong>';
+		rows += colorDebugRow($.i18n('main_ledsim_debug_average'), averageColor(colors, 0, ledCount));
+
+		if (ledCount > 1)
+		{
+			var middle = Math.floor(ledCount / 2);
+			rows += colorDebugRow($.i18n('main_ledsim_debug_first_half'), averageColor(colors, 0, middle));
+			rows += colorDebugRow($.i18n('main_ledsim_debug_second_half'), averageColor(colors, middle, ledCount));
+		}
+		else
+		{
+			rows += colorDebugRow($.i18n('main_ledsim_debug_led') + ' 0', averageColor(colors, 0, 1));
+		}
+
+		panel.html(rows);
 	};
 
 	function leftPad(num, size) {
@@ -264,6 +340,19 @@ $(document).ready(function() {
 	$('#leds_toggle_num').off().on("click", function() {
 		toggleLedsNum = !toggleLedsNum;
 		toggleClass('#leds_toggle_num', "btn-danger", "btn-success");
+	});
+
+	$('#leds_toggle_debug').off().on("click", function() {
+		toggleColorDebug = !toggleColorDebug;
+		toggleClass('#leds_toggle_debug', "btn-danger", "btn-success");
+
+		if (toggleColorDebug && !window.ledStreamActive)
+		{
+			requestLedColorsStart();
+			setClassByBool('#leds_toggle', false, "btn-danger", "btn-success");
+		}
+
+		updateColorDebug(lastLedColors);
 	});
 	
 	$('#leds_toggle_live_video').off().on("click", function() {
@@ -322,6 +411,7 @@ $(document).ready(function() {
 		$('#leds_canvas').html("");
 		var leds_html = '<canvas id="image_preview_canv" width="'+canvas_width+'" height="'+canvas_height+'"  style="position: absolute; left: 0; top: 0; z-index: 99998;"></canvas>';
 		leds_html += '<canvas id="leds_preview_canv" width="'+canvas_width+'" height="'+canvas_height+'"  style="position: absolute; left: 0; top: 0; z-index: 99999;"></canvas>';
+		leds_html += '<div id="leds_color_debug" style="display:none;position:absolute;right:8px;bottom:8px;z-index:100000;background:rgba(0,0,0,0.78);color:#fff;border:1px solid rgba(255,255,255,0.22);border-radius:4px;padding:0.55rem 0.65rem;font-size:0.78rem;line-height:1.2;text-align:left;min-width:13rem;box-shadow:0 0.25rem 0.8rem rgba(0,0,0,0.35);"></div>';
 
 		$('#leds_canvas').html(leds_html);
 
@@ -331,6 +421,7 @@ $(document).ready(function() {
 		create2dPaths();
 		printLedsToCanvas();
 		resetImage();
+		updateColorDebug(lastLedColors);
 	};
 
 
@@ -378,7 +469,8 @@ $(document).ready(function() {
 		}
 		else
 		{
-			printLedsToCanvas(event.response.result.leds)
+			lastLedColors = event.response.result.leds;
+			printLedsToCanvas(lastLedColors)
 		}
 	});
 
