@@ -523,6 +523,9 @@ float3 ImageColorAveraging::calcDominantOklchMulticolorForLeds(const Image<Color
 	std::array<float, DOMINANT_HUE_BINS> hueWeights{};
 	std::array<float, DOMINANT_HUE_BINS> hueChromaSums{};
 	std::array<float, DOMINANT_HUE_BINS> hueLightnessSums{};
+	std::array<float, DOMINANT_HUE_BINS> hueDarkChromaSums{};
+	std::array<float, DOMINANT_HUE_BINS> hueDarkLightnessSums{};
+	std::array<float, DOMINANT_HUE_BINS> hueDarkWeights{};
 	std::array<float, DOMINANT_HUE_BINS> hueCosSums{};
 	std::array<float, DOMINANT_HUE_BINS> hueSinSums{};
 	float totalHueWeight = 0.0f;
@@ -583,6 +586,11 @@ float3 ImageColorAveraging::calcDominantOklchMulticolorForLeds(const Image<Color
 			hueLightnessSums[hueBin] += oklab.x * hueWeight;
 			hueCosSums[hueBin] += std::cos(hue) * hueWeight;
 			hueSinSums[hueBin] += std::sin(hue) * hueWeight;
+
+			const float darkHueWeight = hueWeight * (1.0f - smoothStep(0.32f, 0.48f, oklab.x));
+			hueDarkWeights[hueBin] += darkHueWeight;
+			hueDarkChromaSums[hueBin] += oklabChroma * darkHueWeight;
+			hueDarkLightnessSums[hueBin] += oklab.x * darkHueWeight;
 			totalHueWeight += hueWeight;
 		}
 	}
@@ -603,6 +611,9 @@ float3 ImageColorAveraging::calcDominantOklchMulticolorForLeds(const Image<Color
 	float bestHueWeight = 0.0f;
 	float bestHueChromaSum = 0.0f;
 	float bestHueLightnessSum = 0.0f;
+	float bestHueDarkChromaSum = 0.0f;
+	float bestHueDarkLightnessSum = 0.0f;
+	float bestHueDarkWeight = 0.0f;
 	float bestHueCosSum = 0.0f;
 	float bestHueSinSum = 0.0f;
 
@@ -617,6 +628,9 @@ float3 ImageColorAveraging::calcDominantOklchMulticolorForLeds(const Image<Color
 			bestHueWeight = candidateWeight;
 			bestHueChromaSum = hueChromaSums[prev] + hueChromaSums[i] + hueChromaSums[next];
 			bestHueLightnessSum = hueLightnessSums[prev] + hueLightnessSums[i] + hueLightnessSums[next];
+			bestHueDarkChromaSum = hueDarkChromaSums[prev] + hueDarkChromaSums[i] + hueDarkChromaSums[next];
+			bestHueDarkLightnessSum = hueDarkLightnessSums[prev] + hueDarkLightnessSums[i] + hueDarkLightnessSums[next];
+			bestHueDarkWeight = hueDarkWeights[prev] + hueDarkWeights[i] + hueDarkWeights[next];
 			bestHueCosSum = hueCosSums[prev] + hueCosSums[i] + hueCosSums[next];
 			bestHueSinSum = hueSinSums[prev] + hueSinSums[i] + hueSinSums[next];
 		}
@@ -634,10 +648,23 @@ float3 ImageColorAveraging::calcDominantOklchMulticolorForLeds(const Image<Color
 	{
 		const float dominantHue = std::atan2(bestHueSinSum, bestHueCosSum);
 		const float sceneLightness = (sceneLightnessWeight > 0.0001f) ? sceneLightnessSum / sceneLightnessWeight : bestHueLightnessSum / bestHueWeight;
-		const float dominantLightness = bestHueLightnessSum / bestHueWeight;
+		float dominantLightness = bestHueLightnessSum / bestHueWeight;
+		float dominantChroma = bestHueChromaSum / bestHueWeight;
+
+		if (bestHueDarkWeight > 0.0001f)
+		{
+			const float darkLightness = bestHueDarkLightnessSum / bestHueDarkWeight;
+			const float darkChroma = bestHueDarkChromaSum / bestHueDarkWeight;
+			const float overBrightenedDarkHue = smoothStep(0.01f, 0.08f, dominantLightness - darkLightness);
+			const float darkHueCoverage = std::clamp(bestHueDarkWeight / bestHueWeight, 0.0f, 1.0f);
+			const float darkHueProtection = overBrightenedDarkHue * smoothStep(0.12f, 0.45f, darkHueCoverage);
+
+			dominantLightness = dominantLightness * (1.0f - darkHueProtection) + darkLightness * darkHueProtection;
+			dominantChroma = dominantChroma * (1.0f - 0.75f * darkHueProtection) + darkChroma * (0.75f * darkHueProtection);
+		}
+
 		const float dominantBrightnessBlend = std::clamp(_dominantColorConfig.oklchDominantBrightnessBlend, 0.0f, 1.0f);
 		const float targetLightness = sceneLightness * (1.0f - dominantBrightnessBlend) + dominantLightness * dominantBrightnessBlend;
-		const float dominantChroma = bestHueChromaSum / bestHueWeight;
 		const float deepSaturatedColor = (1.0f - smoothStep(0.30f, 0.48f, dominantLightness)) * smoothStep(0.04f, 0.12f, dominantChroma);
 		const float adjustedTargetLightness = targetLightness * (1.0f - 0.07f * deepSaturatedColor);
 		const float targetChroma = std::clamp(dominantChroma * (OKLCH_COLORFULNESS_BOOST - 0.08f * deepSaturatedColor), 0.0f, 0.34f);
