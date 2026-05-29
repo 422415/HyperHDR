@@ -10,6 +10,7 @@
 #include <utils/Components.h>
 #include <api/BaseAPI.h>
 #include <base/AccessManager.h>
+#include <infinite-color-engine/SharedOutputColors.h>
 #include <lut-calibrator/LutCalibrator.h>
 
 #ifdef ENABLE_BONJOUR
@@ -48,6 +49,7 @@ protected slots:
 	virtual void handlerInstanceImageUpdated(const Image<ColorRgb>& image) = 0;
 
 private slots:
+	void handleFinalOutputColors(SharedOutputColors nonlinearRgbColors);
 	void componentStateHandler(hyperhdr::Components comp, bool state);
 	void priorityUpdateHandler();
 	void imageToLedsMappingChangeHandler(int mappingType);
