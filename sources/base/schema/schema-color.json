@@ -9,9 +9,9 @@
 			"type" : "string",
 			"required" : true,
 			"title" : "edt_conf_color_imageToLedMappingType_title",
-			"enum" : ["advanced", "advanced_vivid", "advanced_dominant", "unicolor_mean"],
+			"enum" : ["advanced", "advanced_vivid", "advanced_dominant", "advanced_dominant_oklch", "unicolor_mean"],
 			"options" : {
-				"enum_titles" : ["edt_conf_enum_multicolor_advanced", "edt_conf_enum_multicolor_advanced_vivid", "edt_conf_enum_multicolor_advanced_dominant", "edt_conf_enum_unicolor_mean"]
+				"enum_titles" : ["edt_conf_enum_multicolor_advanced", "edt_conf_enum_multicolor_advanced_vivid", "edt_conf_enum_multicolor_advanced_dominant", "edt_conf_enum_multicolor_advanced_dominant_oklch", "edt_conf_enum_unicolor_mean"]
 			},
 			"default"  : "advanced",
 			"propertyOrder" : 1
@@ -32,12 +32,7 @@
 			"title" : "edt_conf_dominant_bright_neutral_suppression_title",
 			"default" : true,
 			"required" : true,
-			"propertyOrder" : 3,
-			"options" : {
-				"dependencies": {
-					"imageToLedMappingType": "advanced_dominant"
-				}
-			}
+			"propertyOrder" : 3
 		},
 		"dominant_color_bright_neutral_max_coverage" :
 		{
@@ -52,7 +47,6 @@
 			"propertyOrder" : 4,
 			"options" : {
 				"dependencies": {
-					"imageToLedMappingType": "advanced_dominant",
 					"dominant_color_bright_neutral_suppression": true
 				}
 			}
@@ -70,7 +64,6 @@
 			"propertyOrder" : 5,
 			"options" : {
 				"dependencies": {
-					"imageToLedMappingType": "advanced_dominant",
 					"dominant_color_bright_neutral_suppression": true
 				}
 			}
@@ -88,7 +81,6 @@
 			"propertyOrder" : 6,
 			"options" : {
 				"dependencies": {
-					"imageToLedMappingType": "advanced_dominant",
 					"dominant_color_bright_neutral_suppression": true
 				}
 			}
@@ -106,7 +98,6 @@
 			"propertyOrder" : 7,
 			"options" : {
 				"dependencies": {
-					"imageToLedMappingType": "advanced_dominant",
 					"dominant_color_bright_neutral_suppression": true
 				}
 			}

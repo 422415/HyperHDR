@@ -84,7 +84,11 @@ public:
 
 	void enableHardwareAcceleration(bool hardware);
 
-	void enableSdr10BitCapture(bool enabled);
+	static constexpr int SDR_CAPTURE_BGRA8 = 0;
+	static constexpr int SDR_CAPTURE_AUTO = 1;
+	static constexpr int SDR_CAPTURE_RGB10 = 2;
+
+	void setSdrCaptureMode(int mode);
 
 	void setMonitorNits(int nits);
 
@@ -268,7 +272,7 @@ protected:
 	bool		_initialized;
 	int			_fpsSoftwareDecimation;
 	bool		_hardware;
-	bool		_sdr10BitCapture;
+	int			_sdrCaptureMode;
 
 	PixelFormat _actualVideoFormat;
 	int			_actualWidth, _actualHeight, _actualFPS;

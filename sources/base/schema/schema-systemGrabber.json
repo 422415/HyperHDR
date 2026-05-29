@@ -54,18 +54,19 @@
 			"required" : true,
 			"propertyOrder" : 24
 		},
-		"sdr10BitCapture" :
+		"sdrCaptureFormat" :
 		{
-			"type" : "boolean",
-			"format": "checkbox",
-			"title" : "edt_conf_sdr10bit_capture_title",
-			"default" : false,
-			"required" : true,
-			"options": {
+			"type" : "string",
+			"title" : "edt_conf_sdr_capture_format_title",
+			"enum" : ["bgra8", "auto", "rgb10"],
+			"options" : {
+				"enum_titles" : ["edt_conf_enum_sdr_capture_bgra8", "edt_conf_enum_sdr_capture_auto", "edt_conf_enum_sdr_capture_rgb10"],
 				"dependencies": {
 					"hardware": true
 				}
 			},
+			"default" : "bgra8",
+			"required" : true,
 			"propertyOrder" : 25
 		},
 		"monitor_nits" :

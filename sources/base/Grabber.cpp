@@ -30,6 +30,8 @@
 	#include <QJsonArray>
 #endif
 
+#include <algorithm>
+
 #include <base/Grabber.h>
 #include <utils/GlobalSignals.h>
 
@@ -68,7 +70,7 @@ Grabber::Grabber(const QString& configurationPath, const QString& grabberName)
 	, _initialized(false)
 	, _fpsSoftwareDecimation(1)
 	, _hardware(false)
-	, _sdr10BitCapture(false)
+	, _sdrCaptureMode(SDR_CAPTURE_BGRA8)
 	, _actualVideoFormat(PixelFormat::NO_CHANGE)
 	, _actualWidth(0)
 	, _actualHeight(0)
@@ -252,13 +254,15 @@ void Grabber::enableHardwareAcceleration(bool hardware)
 	}
 }
 
-void Grabber::enableSdr10BitCapture(bool enabled)
+void Grabber::setSdrCaptureMode(int mode)
 {
-	if (_sdr10BitCapture != enabled)
-	{
-		_sdr10BitCapture = enabled;
+	mode = std::clamp(mode, SDR_CAPTURE_BGRA8, SDR_CAPTURE_RGB10);
 
-		Debug(_log, "Set experimental SDR 10-bit capture to {:s}", _sdr10BitCapture ? "enabled" : "disabled");
+	if (_sdrCaptureMode != mode)
+	{
+		_sdrCaptureMode = mode;
+
+		Debug(_log, "Set SDR capture format mode to {:d}", _sdrCaptureMode);
 
 		if (_initialized && !_blocked)
 		{
@@ -268,7 +272,7 @@ void Grabber::enableSdr10BitCapture(bool enabled)
 		}
 		else
 		{
-			Info(_log, "Delayed restart of the grabber due to change of experimental SDR 10-bit capture");
+			Info(_log, "Delayed restart of the grabber due to change of SDR capture format mode");
 			_restartNeeded = true;
 		}
 	}

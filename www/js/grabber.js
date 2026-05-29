@@ -665,7 +665,7 @@ $(document).ready( function(){
 				createHint("intro", $.i18n('conf_grabber_amlogic_intro'), "editor_container_system_device");			
 
 			$('[data-schemapath="root.systemGrabber.hdrToneMapping"]').toggle(false);
-			$('[data-schemapath="root.systemGrabber.sdr10BitCapture"]').toggle(false);
+			$('[data-schemapath="root.systemGrabber.sdrCaptureFormat"]').toggle(false);
 
 			if (window.serverInfo.systemGrabbers.device.indexOf("pipewire")<0)
 			{
@@ -677,7 +677,7 @@ $(document).ready( function(){
 				{
 					$('[data-schemapath="root.systemGrabber.reorder_displays"]').toggle(false);
 					$('[data-schemapath="root.systemGrabber.monitor_nits"]').toggle(false);
-					$('[data-schemapath="root.systemGrabber.sdr10BitCapture"]').toggle(false);
+					$('[data-schemapath="root.systemGrabber.sdrCaptureFormat"]').toggle(false);
 				}
 				hideDirectXParams();
 				conf_system_section_editor.watch('root.systemGrabber.hardware', function() { hideDirectXParams(); });

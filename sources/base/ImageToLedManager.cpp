@@ -64,6 +64,9 @@ int ImageToLedManager::mappingTypeToInt(const QString& mappingType)
 	if (mappingType == "advanced_dominant")
 		return 3;
 
+	if (mappingType == "advanced_dominant_oklch")
+		return 4;
+
 	if (mappingType == "advanced_vivid")
 		return 2;
 
@@ -77,6 +80,9 @@ QString ImageToLedManager::mappingTypeToStr(int mappingType)
 {
 	if (mappingType == 3)
 		return "advanced_dominant";
+
+	if (mappingType == 4)
+		return "advanced_dominant_oklch";
 
 	if (mappingType == 2)
 		return "advanced_vivid";

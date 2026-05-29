@@ -388,8 +388,8 @@ bool DxGrabber::initDirectX(QString selectedDeviceName)
 						pOutput6->GetDesc1(&descGamut);
 
 						display->wideGamut = descGamut.ColorSpace == DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020;
-						Info(_log, "Gamut: {:s}, min nits: {:0.2f}, max nits: {:0.2f}, max frame nits: {:0.2f}, white point: [{:0.2f}, {:0.2f}]",
-									std::string_view((display->wideGamut) ? "HDR" : "SDR"), descGamut.MinLuminance, descGamut.MaxLuminance, descGamut.MaxFullFrameLuminance,
+						Info(_log, "Gamut: {:s}, bits per color: {:d}, min nits: {:0.2f}, max nits: {:0.2f}, max frame nits: {:0.2f}, white point: [{:0.2f}, {:0.2f}]",
+									std::string_view((display->wideGamut) ? "HDR" : "SDR"), descGamut.BitsPerColor, descGamut.MinLuminance, descGamut.MaxLuminance, descGamut.MaxFullFrameLuminance,
 									descGamut.WhitePoint[0], descGamut.WhitePoint[1]);
 
 						if (display->wideGamut && display->targetMonitorNits == 0)
@@ -412,9 +412,32 @@ bool DxGrabber::initDirectX(QString selectedDeviceName)
 							}
 						}
 
-						if (_hardware && !display->wideGamut && _sdr10BitCapture)
+						const bool trySdr10Capture =
+							_hardware &&
+							!display->wideGamut &&
+							(_sdrCaptureMode == SDR_CAPTURE_RGB10 ||
+								(_sdrCaptureMode == SDR_CAPTURE_AUTO && descGamut.BitsPerColor >= 10));
+
+						if (_hardware && !display->wideGamut)
 						{
-							Info(_log, "Trying experimental SDR 10-bit capture format");
+							if (_sdrCaptureMode == SDR_CAPTURE_AUTO)
+							{
+								Info(_log, "SDR capture auto mode selected {:s} based on display bit depth ({:d} bits per color)",
+									trySdr10Capture ? "RGB10A2" : "standard BGRA8", descGamut.BitsPerColor);
+							}
+							else if (_sdrCaptureMode == SDR_CAPTURE_RGB10)
+							{
+								Info(_log, "SDR capture mode forced to experimental RGB10A2");
+							}
+							else
+							{
+								Info(_log, "SDR capture mode forced to standard BGRA8");
+							}
+						}
+
+						if (trySdr10Capture)
+						{
+							Info(_log, "Trying experimental SDR RGB10A2 capture format");
 
 							DXGI_FORMAT deepSdrFormat = DXGI_FORMAT_R10G10B10A2_UNORM;
 							status = pOutput6->DuplicateOutput1(_d3dDevice, 0, 1, &deepSdrFormat, &display->d3dDuplicate);
@@ -422,7 +445,7 @@ bool DxGrabber::initDirectX(QString selectedDeviceName)
 							if (CHECK(status))
 							{
 								display->sdr10Bit = true;
-								Info(_log, "Using experimental SDR 10-bit format");
+								Info(_log, "Using experimental SDR RGB10A2 format");
 							}
 							else
 							{

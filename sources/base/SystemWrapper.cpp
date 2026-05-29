@@ -161,7 +161,15 @@ void SystemWrapper::handleSettingsUpdate(settings::type type, const QJsonDocumen
 
 			_grabber->enableHardwareAcceleration(obj["hardware"].toBool(false));
 
-			_grabber->enableSdr10BitCapture(obj["sdr10BitCapture"].toBool(false));
+			int sdrCaptureMode = Grabber::SDR_CAPTURE_BGRA8;
+			const QString sdrCaptureFormat = obj["sdrCaptureFormat"].toString();
+			if (sdrCaptureFormat == "auto")
+				sdrCaptureMode = Grabber::SDR_CAPTURE_AUTO;
+			else if (sdrCaptureFormat == "rgb10")
+				sdrCaptureMode = Grabber::SDR_CAPTURE_RGB10;
+			else if (!obj.contains("sdrCaptureFormat") && obj["sdr10BitCapture"].toBool(false))
+				sdrCaptureMode = Grabber::SDR_CAPTURE_RGB10;
+			_grabber->setSdrCaptureMode(sdrCaptureMode);
 
 			_grabber->setMonitorNits(obj["monitor_nits"].toInt(200));
 

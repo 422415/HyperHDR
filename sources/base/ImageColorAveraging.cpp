@@ -27,10 +27,12 @@
 
 #include <base/ImageColorAveraging.h>
 #include <base/ImageToLedManager.h>
+#include <infinite-color-engine/ColorSpace.h>
 #include <infinite-color-engine/InfiniteProcessing.h>
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <ranges>
 #include <iterator>
 
@@ -42,6 +44,22 @@ using namespace linalg::aliases;
 namespace
 {
 	constexpr int DOMINANT_HUE_BINS = 24;
+	constexpr float OKLCH_PI = 3.14159265358979323846f;
+	constexpr float OKLCH_MIN_CHROMA = 0.015f;
+	constexpr float OKLCH_CHROMA_REFERENCE = 0.12f;
+	constexpr float OKLCH_COLORFULNESS_BOOST = 1.15f;
+	constexpr float OKLCH_SCENE_LIGHTNESS_BLEND = 0.65f;
+	constexpr float OKLCH_MIN_DOMINANT_SHARE = 0.16f;
+	constexpr float OKLCH_MIN_HUE_COHERENCE = 0.18f;
+
+	float3 clampFloat3(const float3& value, float minValue, float maxValue)
+	{
+		return float3{
+			std::clamp(value.x, minValue, maxValue),
+			std::clamp(value.y, minValue, maxValue),
+			std::clamp(value.z, minValue, maxValue)
+		};
+	}
 
 	bool isBrightNeutralHighlight(const DominantColorConfig& config, float maxComponent, float saturation, float luma)
 	{
@@ -72,6 +90,12 @@ namespace
 		}
 
 		return std::clamp(static_cast<int>((hue / 6.0f) * DOMINANT_HUE_BINS), 0, DOMINANT_HUE_BINS - 1);
+	}
+
+	int oklchHueToBin(float hue)
+	{
+		const float normalized = (hue + OKLCH_PI) / (2.0f * OKLCH_PI);
+		return std::clamp(static_cast<int>(normalized * DOMINANT_HUE_BINS), 0, DOMINANT_HUE_BINS - 1);
 	}
 }
 
@@ -224,6 +248,7 @@ void ImageColorAveraging::process(std::vector<float3>& ledColors, const Image<Co
 		case 1: getUnicolorForLeds(ledColors, image); break;
 		case 2: getVividMulticolorForLeds(ledColors, image); break;
 		case 3: getDominantMulticolorForLeds(ledColors, image); break;
+		case 4: getDominantOklchMulticolorForLeds(ledColors, image); break;
 		default: getMulticolorForLeds(ledColors, image);
 	}
 
@@ -267,6 +292,14 @@ void ImageColorAveraging::getDominantMulticolorForLeds(std::vector<float3>& ledC
 	for (auto colors = _colorsMap.begin(); colors != _colorsMap.end(); ++colors)
 	{
 		ledColors.push_back(calcDominantMulticolorForLeds(image, *colors));
+	}
+}
+
+void ImageColorAveraging::getDominantOklchMulticolorForLeds(std::vector<float3>& ledColors, const Image<ColorRgb>& image) const
+{
+	for (auto colors = _colorsMap.begin(); colors != _colorsMap.end(); ++colors)
+	{
+		ledColors.push_back(calcDominantOklchMulticolorForLeds(image, *colors));
 	}
 }
 
@@ -431,6 +464,153 @@ float3 ImageColorAveraging::calcDominantMulticolorForLeds(const Image<ColorRgb>&
 	if (neutralWeight > 0.0001f)
 	{
 		return neutralSum / neutralWeight;
+	}
+
+	if (ambientWeight > 0.0001f)
+	{
+		return ambientSum / ambientWeight;
+	}
+
+	return calcVividMulticolorForLeds(image, colors);
+}
+
+float3 ImageColorAveraging::calcDominantOklchMulticolorForLeds(const Image<ColorRgb>& image, const std::vector<uint32_t>& colors) const
+{
+	if (colors.empty())
+	{
+		return float3{ 0, 0, 0 };
+	}
+
+	const uint8_t* imgData = image.rawMem();
+	size_t brightNeutralHighlightCount = 0;
+	size_t nonHighlightCount = 0;
+	float nonHighlightLumaSum = 0.0f;
+
+	for (const uint32_t colorOffset : colors)
+	{
+		const byte3 nonlinear(imgData[colorOffset], imgData[colorOffset + 1], imgData[colorOffset + 2]);
+		const float3 nonlinear01 = static_cast<float3>(nonlinear) / 255.0f;
+		const float maxComponent = linalg::maxelem(nonlinear01);
+		const float minComponent = linalg::minelem(nonlinear01);
+		const float chroma = maxComponent - minComponent;
+		const float saturation = (maxComponent > 0.0001f) ? chroma / maxComponent : 0.0f;
+		const float luma = 0.2126f * nonlinear01.x + 0.7152f * nonlinear01.y + 0.0722f * nonlinear01.z;
+
+		if (isBrightNeutralHighlight(_dominantColorConfig, maxComponent, saturation, luma))
+		{
+			brightNeutralHighlightCount++;
+		}
+		else
+		{
+			nonHighlightCount++;
+			nonHighlightLumaSum += luma;
+		}
+	}
+
+	const float brightNeutralHighlightCoverage = static_cast<float>(brightNeutralHighlightCount) / static_cast<float>(colors.size());
+	const float nonHighlightAverageLuma = (nonHighlightCount > 0) ? nonHighlightLumaSum / static_cast<float>(nonHighlightCount) : 1.0f;
+	const bool suppressSparseBrightNeutralHighlights =
+		_dominantColorConfig.brightNeutralSuppression &&
+		brightNeutralHighlightCount > 0 &&
+		brightNeutralHighlightCoverage <= _dominantColorConfig.brightNeutralMaxCoverage &&
+		nonHighlightAverageLuma <= _dominantColorConfig.darkSceneMaxLuma;
+
+	std::array<float, DOMINANT_HUE_BINS> hueWeights{};
+	std::array<float, DOMINANT_HUE_BINS> hueChromaSums{};
+	std::array<float, DOMINANT_HUE_BINS> hueLightnessSums{};
+	std::array<float, DOMINANT_HUE_BINS> hueCosSums{};
+	std::array<float, DOMINANT_HUE_BINS> hueSinSums{};
+	float totalHueWeight = 0.0f;
+	float sceneLightnessSum = 0.0f;
+	float sceneLightnessWeight = 0.0f;
+	float3 ambientSum(0, 0, 0);
+	float ambientWeight = 0.0f;
+
+	for (const uint32_t colorOffset : colors)
+	{
+		const byte3 nonlinear(imgData[colorOffset], imgData[colorOffset + 1], imgData[colorOffset + 2]);
+		const float3 nonlinear01 = static_cast<float3>(nonlinear) / 255.0f;
+		const float maxComponent = linalg::maxelem(nonlinear01);
+		const float minComponent = linalg::minelem(nonlinear01);
+		const float rgbChroma = maxComponent - minComponent;
+		const float saturation = (maxComponent > 0.0001f) ? rgbChroma / maxComponent : 0.0f;
+		const float luma = 0.2126f * nonlinear01.x + 0.7152f * nonlinear01.y + 0.0722f * nonlinear01.z;
+
+		if (suppressSparseBrightNeutralHighlights && isBrightNeutralHighlight(_dominantColorConfig, maxComponent, saturation, luma))
+		{
+			continue;
+		}
+
+		const float visible = std::clamp((luma - 0.025f) / 0.18f, 0.0f, 1.0f);
+		const float3 linear = static_cast<float3>(InfiniteProcessing::srgbNonlinearToLinear(nonlinear)) / 65535.0f;
+		const float3 oklab = ColorSpaceMath::linear_rgb_to_oklab(linear);
+		const float oklabChroma = std::sqrt(oklab.y * oklab.y + oklab.z * oklab.z);
+		const float sceneWeight = 0.15f + 0.85f * visible;
+
+		ambientSum += linear;
+		ambientWeight += 1.0f;
+		sceneLightnessSum += oklab.x * sceneWeight;
+		sceneLightnessWeight += sceneWeight;
+
+		if (oklabChroma > OKLCH_MIN_CHROMA && saturation > 0.05f && visible > 0.0f)
+		{
+			const float hue = std::atan2(oklab.z, oklab.y);
+			const float chromaConfidence = std::clamp(oklabChroma / OKLCH_CHROMA_REFERENCE, 0.0f, 1.0f);
+			const float hueWeight = visible * maxComponent * chromaConfidence * chromaConfidence * (0.25f + 0.75f * saturation);
+			const int hueBin = oklchHueToBin(hue);
+
+			hueWeights[hueBin] += hueWeight;
+			hueChromaSums[hueBin] += oklabChroma * hueWeight;
+			hueLightnessSums[hueBin] += oklab.x * hueWeight;
+			hueCosSums[hueBin] += std::cos(hue) * hueWeight;
+			hueSinSums[hueBin] += std::sin(hue) * hueWeight;
+			totalHueWeight += hueWeight;
+		}
+	}
+
+	float bestHueWeight = 0.0f;
+	float bestHueChromaSum = 0.0f;
+	float bestHueLightnessSum = 0.0f;
+	float bestHueCosSum = 0.0f;
+	float bestHueSinSum = 0.0f;
+
+	for (int i = 0; i < DOMINANT_HUE_BINS; ++i)
+	{
+		const int prev = (i + DOMINANT_HUE_BINS - 1) % DOMINANT_HUE_BINS;
+		const int next = (i + 1) % DOMINANT_HUE_BINS;
+		const float candidateWeight = hueWeights[prev] + hueWeights[i] + hueWeights[next];
+
+		if (candidateWeight > bestHueWeight)
+		{
+			bestHueWeight = candidateWeight;
+			bestHueChromaSum = hueChromaSums[prev] + hueChromaSums[i] + hueChromaSums[next];
+			bestHueLightnessSum = hueLightnessSums[prev] + hueLightnessSums[i] + hueLightnessSums[next];
+			bestHueCosSum = hueCosSums[prev] + hueCosSums[i] + hueCosSums[next];
+			bestHueSinSum = hueSinSums[prev] + hueSinSums[i] + hueSinSums[next];
+		}
+	}
+
+	const float dominantShare = (totalHueWeight > 0.0001f) ? bestHueWeight / totalHueWeight : 0.0f;
+	const float hueCoherence = (bestHueWeight > 0.0001f) ? std::sqrt(bestHueCosSum * bestHueCosSum + bestHueSinSum * bestHueSinSum) / bestHueWeight : 0.0f;
+	const bool hasClearDominantHue =
+		bestHueWeight > 0.0001f &&
+		dominantShare >= OKLCH_MIN_DOMINANT_SHARE &&
+		hueCoherence >= OKLCH_MIN_HUE_COHERENCE;
+
+	if (hasClearDominantHue)
+	{
+		const float dominantHue = std::atan2(bestHueSinSum, bestHueCosSum);
+		const float sceneLightness = (sceneLightnessWeight > 0.0001f) ? sceneLightnessSum / sceneLightnessWeight : bestHueLightnessSum / bestHueWeight;
+		const float dominantLightness = bestHueLightnessSum / bestHueWeight;
+		const float targetLightness = sceneLightness * OKLCH_SCENE_LIGHTNESS_BLEND + dominantLightness * (1.0f - OKLCH_SCENE_LIGHTNESS_BLEND);
+		const float targetChroma = std::clamp((bestHueChromaSum / bestHueWeight) * OKLCH_COLORFULNESS_BOOST, 0.0f, 0.34f);
+		const float3 oklab{
+			std::clamp(targetLightness, 0.0f, 1.0f),
+			std::cos(dominantHue) * targetChroma,
+			std::sin(dominantHue) * targetChroma
+		};
+
+		return clampFloat3(ColorSpaceMath::oklab_to_linear_rgb(ColorSpaceMath::clamp_oklab_chroma_to_gamut(oklab)), 0.0f, 1.0f);
 	}
 
 	if (ambientWeight > 0.0001f)
