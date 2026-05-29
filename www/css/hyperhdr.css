@@ -1134,3 +1134,232 @@ input.mobileToggle:disabled + label:before
 {	
 	background: #a0a0a0 !important;	
 }
+
+.led-color-debug-popup {
+	position: fixed;
+	z-index: 10050;
+	width: min(380px, calc(100vw - 16px));
+	max-height: calc(100vh - 16px);
+	background: #101720;
+	color: #f8fbff;
+	border: 1px solid rgba(255,255,255,0.22);
+	border-radius: 8px;
+	box-shadow: 0 18px 48px rgba(0,0,0,0.42);
+	overflow: hidden;
+}
+
+.led-color-debug-popup.led-color-debug-full,
+.led-color-debug-popup.led-color-debug-left,
+.led-color-debug-popup.led-color-debug-right {
+	top: 0 !important;
+	bottom: auto !important;
+	border: 0 !important;
+	border-radius: 0 !important;
+	max-height: 100vh;
+	box-shadow: none;
+}
+
+.led-color-debug-popup.led-color-debug-full {
+	left: 0 !important;
+	width: 100vw !important;
+	height: 100vh !important;
+}
+
+.led-color-debug-popup.led-color-debug-left,
+.led-color-debug-popup.led-color-debug-right {
+	width: 50vw !important;
+	height: 100vh !important;
+}
+
+.led-color-debug-popup.led-color-debug-left {
+	left: 0 !important;
+}
+
+.led-color-debug-popup.led-color-debug-right {
+	left: 50vw !important;
+}
+
+.led-color-debug-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 0.75rem;
+	padding: 0.7rem 0.8rem;
+	background: #172230;
+	border-bottom: 1px solid rgba(255,255,255,0.12);
+	cursor: move;
+	user-select: none;
+}
+
+.led-color-debug-title {
+	display: flex;
+	flex-direction: column;
+	min-width: 0;
+}
+
+.led-color-debug-title strong {
+	font-size: 0.95rem;
+	line-height: 1.15;
+}
+
+.led-color-debug-title span {
+	margin-top: 0.15rem;
+	color: #b9c6d6;
+	font-size: 0.76rem;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.led-color-debug-actions {
+	display: flex;
+	align-items: center;
+	gap: 0.25rem;
+	flex-shrink: 0;
+}
+
+.led-color-debug-actions .btn {
+	width: 2rem;
+	height: 1.85rem;
+	padding: 0;
+	font-size: 0.72rem;
+	line-height: 1;
+}
+
+.led-color-debug-actions .btn.active {
+	background: #0d8ac5;
+	border-color: #0d8ac5;
+	color: #fff;
+}
+
+.led-color-debug-body {
+	padding: 0.8rem;
+	overflow: auto;
+	max-height: calc(100vh - 5.6rem);
+}
+
+.led-color-debug-full .led-color-debug-body,
+.led-color-debug-left .led-color-debug-body,
+.led-color-debug-right .led-color-debug-body {
+	height: calc(100vh - 3.55rem);
+	max-height: none;
+}
+
+.led-color-debug-summary {
+	display: grid;
+	grid-template-columns: minmax(7rem, 10rem) 1fr;
+	gap: 0.8rem;
+	align-items: stretch;
+	margin-bottom: 0.85rem;
+}
+
+.led-color-debug-main-swatch {
+	min-height: 7rem;
+	border-radius: 6px;
+	border: 1px solid rgba(255,255,255,0.2);
+	box-shadow: inset 0 0 0 1px rgba(0,0,0,0.25);
+}
+
+.led-color-debug-full .led-color-debug-main-swatch {
+	min-height: 38vh;
+}
+
+.led-color-debug-left .led-color-debug-main-swatch,
+.led-color-debug-right .led-color-debug-main-swatch {
+	min-height: 28vh;
+}
+
+.led-color-debug-main-values {
+	display: flex;
+	flex-direction: column;
+	justify-content: center;
+	gap: 0.35rem;
+	min-width: 0;
+}
+
+.led-color-debug-main-values span {
+	color: #b9c6d6;
+	font-size: 0.78rem;
+}
+
+.led-color-debug-main-values strong {
+	font-size: 1.05rem;
+	line-height: 1.25;
+}
+
+.led-color-debug-main-values code,
+.led-color-debug-row code {
+	color: #eef6ff;
+	background: rgba(255,255,255,0.08);
+	border-radius: 4px;
+	padding: 0.1rem 0.25rem;
+}
+
+.led-color-debug-section-title {
+	margin: 0.75rem 0 0.35rem;
+	color: #b9c6d6;
+	font-size: 0.78rem;
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+}
+
+.led-color-debug-row {
+	display: grid;
+	grid-template-columns: 1.2rem minmax(4.8rem, 1fr) auto auto;
+	align-items: center;
+	gap: 0.45rem;
+	padding: 0.28rem 0;
+	border-bottom: 1px solid rgba(255,255,255,0.08);
+}
+
+.led-color-debug-row-swatch {
+	width: 1.15rem;
+	height: 1.15rem;
+	border: 1px solid rgba(255,255,255,0.32);
+	border-radius: 3px;
+}
+
+.led-color-debug-row-label {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.led-color-debug-row-rgb,
+.led-color-debug-row-hex {
+	font-size: 0.78rem;
+	white-space: nowrap;
+}
+
+.led-color-debug-strip {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(0.8rem, 1fr));
+	gap: 0.2rem;
+}
+
+.led-color-debug-strip-led {
+	display: block;
+	aspect-ratio: 1;
+	min-width: 0.8rem;
+	border-radius: 2px;
+	border: 1px solid rgba(255,255,255,0.14);
+}
+
+.led-color-debug-waiting {
+	padding: 1rem;
+	text-align: center;
+	color: #b9c6d6;
+}
+
+@media (max-width: 575px) {
+	.led-color-debug-summary,
+	.led-color-debug-row {
+		grid-template-columns: 1fr;
+	}
+
+	.led-color-debug-row-swatch {
+		width: 100%;
+		height: 2rem;
+	}
+}

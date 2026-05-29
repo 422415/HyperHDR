@@ -1276,6 +1276,7 @@ void HyperAPI::stopDataConnections()
 	CallbackAPI::removeSubscriptions();
 	// led stream colors
 	disconnect(_hyperhdr.get(), &HyperHdrInstance::SignalRawColorsChanged, this, nullptr);
+	disconnect(_hyperhdr.get(), &HyperHdrInstance::SignalFinalOutputColorsReady, this, nullptr);
 	_ledStreamTimer->stop();
 }
 

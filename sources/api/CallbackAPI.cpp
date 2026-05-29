@@ -1,5 +1,8 @@
 #ifndef PCH_ENABLED
 	#include <QVariant>
+
+	#include <algorithm>
+	#include <cmath>
 #endif
 
 #include <HyperhdrConfig.h>
@@ -145,9 +148,9 @@ bool CallbackAPI::subscribeFor(const QString& type, bool unsubscribe)
 	if (type == "leds-colors" && _hyperhdr != nullptr)
 	{
 		if (unsubscribe)
-			disconnect(_hyperhdr.get(), &HyperHdrInstance::SignalRawColorsChanged, this, &CallbackAPI::handleIncomingColors);
+			disconnect(_hyperhdr.get(), &HyperHdrInstance::SignalFinalOutputColorsReady, this, &CallbackAPI::handleFinalOutputColors);
 		else
-			connect(_hyperhdr.get(), &HyperHdrInstance::SignalRawColorsChanged, this, &CallbackAPI::handleIncomingColors, Qt::UniqueConnection);
+			connect(_hyperhdr.get(), &HyperHdrInstance::SignalFinalOutputColorsReady, this, &CallbackAPI::handleFinalOutputColors, Qt::UniqueConnection);
 	}
 
 	if (type == "live-video" && _hyperhdr != nullptr)
@@ -186,6 +189,25 @@ bool CallbackAPI::subscribeFor(const QString& type, bool unsubscribe)
 	}
 
 	return true;
+}
+
+void CallbackAPI::handleFinalOutputColors(SharedOutputColors nonlinearRgbColors)
+{
+	if (nonlinearRgbColors == nullptr)
+		return;
+
+	QVector<ColorRgb> ledValues;
+	ledValues.reserve(static_cast<int>(nonlinearRgbColors->size()));
+
+	for (const auto& color : *nonlinearRgbColors)
+	{
+		const int red = std::clamp(static_cast<int>(std::round(color.x * 255.0f)), 0, 255);
+		const int green = std::clamp(static_cast<int>(std::round(color.y * 255.0f)), 0, 255);
+		const int blue = std::clamp(static_cast<int>(std::round(color.z * 255.0f)), 0, 255);
+		ledValues.push_back(ColorRgb(red, green, blue));
+	}
+
+	handleIncomingColors(ledValues);
 }
 
 void CallbackAPI::subscribe(QJsonArray subsArr)

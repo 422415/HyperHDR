@@ -15,6 +15,9 @@ $(document).ready(function() {
 	var twoDPaths = [];
 	var lastFeedFrame = Date.now();
 	var toggleLedsNum = false;
+	var toggleColorDebug = false;
+	var lastLedColors = null;
+	var colorDebugLayoutMode = "normal";
 
 	CanvasRenderingContext2D.prototype.clear = function(){
 		this.clearRect(0, 0, this.canvas.width, this.canvas.height)
@@ -117,7 +120,8 @@ $(document).ready(function() {
 			},
 			closed: function (e) {
 				modalOpened = false;
-				requestLedColorsStop();
+				if (!toggleColorDebug)
+					requestLedColorsStop();
 				requestLedImageStop();
 			},
 			resizeStop: function (e) {
@@ -163,6 +167,10 @@ $(document).ready(function() {
 					{
 						requestLedColorsStart();					
 					}
+				}
+				if (toggleColorDebug)
+				{
+					requestLedColorsStart();
 				}
 			}, 500);
 		});
@@ -231,6 +239,300 @@ $(document).ready(function() {
 
 			cPos += 3;
 		}
+
+		updateColorDebug(colors);
+	};
+
+	function averageColor(colors, firstLed, lastLed)
+	{
+		var red = 0;
+		var green = 0;
+		var blue = 0;
+		var count = 0;
+
+		for (var led = firstLed; led < lastLed; led++)
+		{
+			var pos = led * 3;
+			red += colors[pos];
+			green += colors[pos + 1];
+			blue += colors[pos + 2];
+			count++;
+		}
+
+		return (count > 0) ? [
+			Math.round(red / count),
+			Math.round(green / count),
+			Math.round(blue / count)
+		] : [0, 0, 0];
+	};
+
+	function colorDebugRow(label, rgb)
+	{
+		return '<div class="led-color-debug-row">' +
+			'<span class="led-color-debug-row-swatch" style="background:' + rgbCss(rgb) + ';"></span>' +
+			'<span class="led-color-debug-row-label">' + label + '</span>' +
+			'<code class="led-color-debug-row-rgb">R ' + rgb[0] + ' / G ' + rgb[1] + ' / B ' + rgb[2] + '</code>' +
+			'<code class="led-color-debug-row-hex">' + rgbHex(rgb) + '</code>' +
+			'</div>';
+	};
+
+	function clampColorChannel(value)
+	{
+		return Math.max(0, Math.min(255, Math.round(Number(value) || 0)));
+	};
+
+	function rgbCss(rgb)
+	{
+		return 'rgb(' + clampColorChannel(rgb[0]) + ',' + clampColorChannel(rgb[1]) + ',' + clampColorChannel(rgb[2]) + ')';
+	};
+
+	function rgbHex(rgb)
+	{
+		return '#' + rgb.map(function(channel) {
+			return clampColorChannel(channel).toString(16).padStart(2, '0');
+		}).join('').toUpperCase();
+	};
+
+	function colorDebugLedStrip(colors)
+	{
+		var ledCount = Math.floor(colors.length / 3);
+		var html = '<div class="led-color-debug-strip">';
+		for (var led = 0; led < ledCount; led++)
+		{
+			var pos = led * 3;
+			var rgb = [colors[pos], colors[pos + 1], colors[pos + 2]];
+			html += '<span class="led-color-debug-strip-led" title="LED ' + led + ' - R ' + rgb[0] + ' / G ' + rgb[1] + ' / B ' + rgb[2] + '" style="background:' + rgbCss(rgb) + ';"></span>';
+		}
+		html += '</div>';
+		return html;
+	};
+
+	function getColorDebugPointer(event)
+	{
+		var originalEvent = event.originalEvent || event;
+		var point = (originalEvent.touches && originalEvent.touches.length > 0) ? originalEvent.touches[0] : originalEvent;
+		return { x: point.clientX, y: point.clientY };
+	};
+
+	function containColorDebugPopup()
+	{
+		if (colorDebugLayoutMode != "normal")
+			return;
+
+		var popup = $('#leds_color_debug_popup');
+		if (!popup.length || !popup.is(':visible'))
+			return;
+
+		var left = parseFloat(popup.css('left'));
+		var top = parseFloat(popup.css('top'));
+		var maxLeft = Math.max(8, window.innerWidth - popup.outerWidth() - 8);
+		var maxTop = Math.max(8, window.innerHeight - popup.outerHeight() - 8);
+
+		left = Math.max(8, Math.min(isNaN(left) ? maxLeft : left, maxLeft));
+		top = Math.max(8, Math.min(isNaN(top) ? maxTop : top, maxTop));
+		popup.css({ left: left + 'px', top: top + 'px', right: 'auto', bottom: 'auto' });
+	};
+
+	function updateColorDebugLayoutButtons()
+	{
+		$('.led-color-debug-window-btn').removeClass('active');
+		$('#leds_color_debug_' + colorDebugLayoutMode).addClass('active');
+	};
+
+	function setColorDebugLayout(mode)
+	{
+		var popup = $('#leds_color_debug_popup');
+		if (!popup.length)
+			return;
+
+		colorDebugLayoutMode = mode;
+		setStorage('led_color_debug_layout', mode);
+
+		popup.removeClass('led-color-debug-full led-color-debug-left led-color-debug-right');
+
+		if (mode == "full")
+		{
+			popup.addClass('led-color-debug-full');
+			popup.css({ left: '0', top: '0', right: 'auto', bottom: 'auto' });
+		}
+		else if (mode == "left")
+		{
+			popup.addClass('led-color-debug-left');
+			popup.css({ left: '0', top: '0', right: 'auto', bottom: 'auto' });
+		}
+		else if (mode == "right")
+		{
+			popup.addClass('led-color-debug-right');
+			popup.css({ left: '50vw', top: '0', right: 'auto', bottom: 'auto' });
+		}
+		else
+		{
+			colorDebugLayoutMode = "normal";
+			var storedLeft = parseFloat(getStorage('led_color_debug_left'));
+			var storedTop = parseFloat(getStorage('led_color_debug_top'));
+			var left = isNaN(storedLeft) ? Math.max(8, window.innerWidth - popup.outerWidth() - 18) : storedLeft;
+			var top = isNaN(storedTop) ? Math.max(8, window.innerHeight - popup.outerHeight() - 18) : storedTop;
+			popup.css({ left: left + 'px', top: top + 'px', right: 'auto', bottom: 'auto' });
+			containColorDebugPopup();
+		}
+
+		updateColorDebugLayoutButtons();
+	};
+
+	function ensureColorDebugPopup()
+	{
+		if ($('#leds_color_debug_popup').length)
+			return;
+
+		var html =
+			'<div id="leds_color_debug_popup" class="led-color-debug-popup" style="display:none;">' +
+				'<div id="leds_color_debug_header" class="led-color-debug-header">' +
+					'<div class="led-color-debug-title">' +
+						'<strong>' + $.i18n('main_ledsim_debug_title') + '</strong>' +
+						'<span id="leds_color_debug_meta">' + $.i18n('main_ledsim_debug_waiting') + '</span>' +
+					'</div>' +
+					'<div class="led-color-debug-actions">' +
+						'<button type="button" id="leds_color_debug_normal" class="btn btn-sm btn-outline-light led-color-debug-window-btn" title="' + $.i18n('main_ledsim_debug_normal') + '">N</button>' +
+						'<button type="button" id="leds_color_debug_left" class="btn btn-sm btn-outline-light led-color-debug-window-btn" title="' + $.i18n('main_ledsim_debug_left') + '">L</button>' +
+						'<button type="button" id="leds_color_debug_right" class="btn btn-sm btn-outline-light led-color-debug-window-btn" title="' + $.i18n('main_ledsim_debug_right') + '">R</button>' +
+						'<button type="button" id="leds_color_debug_full" class="btn btn-sm btn-outline-light led-color-debug-window-btn" title="' + $.i18n('main_ledsim_debug_full') + '">F</button>' +
+						'<button type="button" id="leds_color_debug_close" class="btn btn-sm btn-outline-light" title="' + $.i18n('main_ledsim_debug_close') + '">X</button>' +
+					'</div>' +
+				'</div>' +
+				'<div id="leds_color_debug_body" class="led-color-debug-body"></div>' +
+			'</div>';
+
+		$('body').append(html);
+
+		$('#leds_color_debug_close').off().on('click', function() { closeColorDebugPopup(); });
+		$('#leds_color_debug_normal').off().on('click', function() { setColorDebugLayout('normal'); });
+		$('#leds_color_debug_left').off().on('click', function() { setColorDebugLayout('left'); });
+		$('#leds_color_debug_right').off().on('click', function() { setColorDebugLayout('right'); });
+		$('#leds_color_debug_full').off().on('click', function() { setColorDebugLayout('full'); });
+
+		$('#leds_color_debug_header').off('mousedown.ledColorDebug touchstart.ledColorDebug').on('mousedown.ledColorDebug touchstart.ledColorDebug', function(event) {
+			if ($(event.target).closest('button').length)
+				return;
+
+			if (colorDebugLayoutMode != "normal")
+				setColorDebugLayout('normal');
+
+			var popup = $('#leds_color_debug_popup');
+			var pointer = getColorDebugPointer(event);
+			var startLeft = parseFloat(popup.css('left'));
+			var startTop = parseFloat(popup.css('top'));
+			var startX = pointer.x;
+			var startY = pointer.y;
+
+			event.preventDefault();
+
+			$(document).on('mousemove.ledColorDebugDrag touchmove.ledColorDebugDrag', function(moveEvent) {
+				var movePointer = getColorDebugPointer(moveEvent);
+				popup.css({
+					left: (startLeft + movePointer.x - startX) + 'px',
+					top: (startTop + movePointer.y - startY) + 'px',
+					right: 'auto',
+					bottom: 'auto'
+				});
+				containColorDebugPopup();
+				moveEvent.preventDefault();
+			});
+
+			$(document).on('mouseup.ledColorDebugDrag touchend.ledColorDebugDrag touchcancel.ledColorDebugDrag', function() {
+				$(document).off('.ledColorDebugDrag');
+				setStorage('led_color_debug_left', parseFloat(popup.css('left')));
+				setStorage('led_color_debug_top', parseFloat(popup.css('top')));
+			});
+		});
+
+		$(window).off('resize.ledColorDebug').on('resize.ledColorDebug', function() {
+			if (colorDebugLayoutMode == "normal")
+				containColorDebugPopup();
+		});
+	};
+
+	function openColorDebugPopup()
+	{
+		toggleColorDebug = true;
+		ensureColorDebugPopup();
+		$('#leds_color_debug_popup').show();
+		setColorDebugLayout(getStorage('led_color_debug_layout') || "normal");
+		setClassByBool('#leds_toggle_debug', true, "btn-success", "btn-danger");
+
+		if (!window.ledStreamActive)
+		{
+			requestLedColorsStart();
+			setClassByBool('#leds_toggle', false, "btn-danger", "btn-success");
+		}
+
+		updateColorDebug(lastLedColors);
+	};
+
+	function closeColorDebugPopup()
+	{
+		toggleColorDebug = false;
+		$('#leds_color_debug_popup').hide();
+		setClassByBool('#leds_toggle_debug', false, "btn-success", "btn-danger");
+
+		if (!modalOpened && window.ledStreamActive)
+			requestLedColorsStop();
+	};
+
+	function updateColorDebug(colors)
+	{
+		ensureColorDebugPopup();
+
+		if (!toggleColorDebug)
+		{
+			$('#leds_color_debug_popup').hide();
+			return;
+		}
+
+		var popup = $('#leds_color_debug_popup');
+		var body = $('#leds_color_debug_body');
+		var meta = $('#leds_color_debug_meta');
+		popup.show();
+
+		if (!colors || colors.length < 3)
+		{
+			meta.text($.i18n('main_ledsim_debug_waiting'));
+			body.html('<div class="led-color-debug-waiting">' + $.i18n('main_ledsim_debug_waiting') + '</div>');
+			return;
+		}
+
+		var ledCount = Math.floor(colors.length / 3);
+		var average = averageColor(colors, 0, ledCount);
+		var rows = '<div class="led-color-debug-summary">' +
+			'<div class="led-color-debug-main-swatch" style="background:' + rgbCss(average) + ';"></div>' +
+			'<div class="led-color-debug-main-values">' +
+				'<span>' + $.i18n('main_ledsim_debug_output_average') + '</span>' +
+				'<strong>R ' + average[0] + ' / G ' + average[1] + ' / B ' + average[2] + '</strong>' +
+				'<code>' + rgbHex(average) + '</code>' +
+			'</div>' +
+		'</div>';
+		rows += '<div class="led-color-debug-section-title">' + $.i18n('main_ledsim_debug_samples') + '</div>';
+		rows += colorDebugRow($.i18n('main_ledsim_debug_average'), average);
+
+		if (ledCount > 1)
+		{
+			var middle = Math.floor(ledCount / 2);
+			rows += colorDebugRow($.i18n('main_ledsim_debug_first_half'), averageColor(colors, 0, middle));
+			rows += colorDebugRow($.i18n('main_ledsim_debug_second_half'), averageColor(colors, middle, ledCount));
+			rows += colorDebugRow($.i18n('main_ledsim_debug_led') + ' 0', averageColor(colors, 0, 1));
+			rows += colorDebugRow($.i18n('main_ledsim_debug_led') + ' ' + Math.floor(ledCount / 2), averageColor(colors, Math.floor(ledCount / 2), Math.floor(ledCount / 2) + 1));
+			rows += colorDebugRow($.i18n('main_ledsim_debug_led') + ' ' + (ledCount - 1), averageColor(colors, ledCount - 1, ledCount));
+		}
+		else
+		{
+			rows += colorDebugRow($.i18n('main_ledsim_debug_led') + ' 0', averageColor(colors, 0, 1));
+		}
+
+		rows += '<div class="led-color-debug-section-title">' + $.i18n('main_ledsim_debug_led_strip') + '</div>';
+		rows += colorDebugLedStrip(colors);
+
+		meta.text(ledCount + ' ' + $.i18n('main_ledsim_debug_leds') + ' - ' + new Date().toLocaleTimeString());
+		body.html(rows);
+		containColorDebugPopup();
 	};
 
 	function leftPad(num, size) {
@@ -264,6 +566,13 @@ $(document).ready(function() {
 	$('#leds_toggle_num').off().on("click", function() {
 		toggleLedsNum = !toggleLedsNum;
 		toggleClass('#leds_toggle_num', "btn-danger", "btn-success");
+	});
+
+	$('#leds_toggle_debug').off().on("click", function() {
+		if (toggleColorDebug)
+			closeColorDebugPopup();
+		else
+			openColorDebugPopup();
 	});
 	
 	$('#leds_toggle_live_video').off().on("click", function() {
@@ -372,13 +681,17 @@ $(document).ready(function() {
 
 	
 	$(window.hyperhdr).on("cmd-ledcolors-ledstream-update",function(event){
-		if (!modalOpened)
+		lastLedColors = event.response.result.leds;
+		updateColorDebug(lastLedColors);
+
+		if (!modalOpened && !toggleColorDebug)
 		{
 			requestLedColorsStop();
 		}
-		else
+		else if (modalOpened)
 		{
 			printLedsToCanvas(event.response.result.leds)
+			printLedsToCanvas(lastLedColors)
 		}
 	});
 
