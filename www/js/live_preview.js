@@ -271,7 +271,7 @@ $(document).ready(function() {
 	function colorDebugRow(label, rgb)
 	{
 		return '<div class="led-color-debug-row">' +
-			'<span class="led-color-debug-row-swatch" style="background:' + rgbCss(rgb) + ';"></span>' +
+			colorDebugSwatch('led-color-debug-row-swatch', rgb) +
 			'<span class="led-color-debug-row-label">' + label + '</span>' +
 			'<code class="led-color-debug-row-rgb">R ' + rgb[0] + ' / G ' + rgb[1] + ' / B ' + rgb[2] + '</code>' +
 			'<code class="led-color-debug-row-hex">' + rgbHex(rgb) + '</code>' +
@@ -295,6 +295,39 @@ $(document).ready(function() {
 		}).join('').toUpperCase();
 	};
 
+	function colorDebugSwatch(className, rgb, title)
+	{
+		var normalized = [
+			clampColorChannel(rgb[0]),
+			clampColorChannel(rgb[1]),
+			clampColorChannel(rgb[2])
+		];
+		var safeTitle = title || ('R ' + normalized[0] + ' / G ' + normalized[1] + ' / B ' + normalized[2]);
+
+		return '<canvas class="' + className + ' led-color-debug-canvas-swatch darkreader-ignore" width="48" height="48" ' +
+			'data-r="' + normalized[0] + '" data-g="' + normalized[1] + '" data-b="' + normalized[2] + '" ' +
+			'title="' + safeTitle + '" style="background-color:' + rgbCss(normalized) + ' !important;"></canvas>';
+	};
+
+	function drawColorDebugSwatches()
+	{
+		$('.led-color-debug-canvas-swatch').each(function() {
+			var rgb = [
+				clampColorChannel($(this).attr('data-r')),
+				clampColorChannel($(this).attr('data-g')),
+				clampColorChannel($(this).attr('data-b'))
+			];
+			var context = this.getContext('2d');
+
+			if (!context)
+				return;
+
+			context.clearRect(0, 0, this.width, this.height);
+			context.fillStyle = rgbCss(rgb);
+			context.fillRect(0, 0, this.width, this.height);
+		});
+	};
+
 	function colorDebugLedStrip(colors)
 	{
 		var ledCount = Math.floor(colors.length / 3);
@@ -303,7 +336,7 @@ $(document).ready(function() {
 		{
 			var pos = led * 3;
 			var rgb = [colors[pos], colors[pos + 1], colors[pos + 2]];
-			html += '<span class="led-color-debug-strip-led" title="LED ' + led + ' - R ' + rgb[0] + ' / G ' + rgb[1] + ' / B ' + rgb[2] + '" style="background:' + rgbCss(rgb) + ';"></span>';
+			html += colorDebugSwatch('led-color-debug-strip-led', rgb, 'LED ' + led + ' - R ' + rgb[0] + ' / G ' + rgb[1] + ' / B ' + rgb[2]);
 		}
 		html += '</div>';
 		return html;
@@ -505,7 +538,7 @@ $(document).ready(function() {
 		var ledCount = Math.floor(colors.length / 3);
 		var average = averageColor(colors, 0, ledCount);
 		var rows = '<div class="led-color-debug-summary">' +
-			'<div class="led-color-debug-main-swatch" style="background:' + rgbCss(average) + ';"></div>' +
+			colorDebugSwatch('led-color-debug-main-swatch', average) +
 			'<div class="led-color-debug-main-values">' +
 				'<span>' + $.i18n('main_ledsim_debug_output_average') + '</span>' +
 				'<strong>R ' + average[0] + ' / G ' + average[1] + ' / B ' + average[2] + '</strong>' +
@@ -534,6 +567,7 @@ $(document).ready(function() {
 
 		meta.text(ledCount + ' ' + $.i18n('main_ledsim_debug_leds') + ' - ' + new Date().toLocaleTimeString());
 		body.html(rows);
+		drawColorDebugSwatches();
 		containColorDebugPopup();
 	};
 
