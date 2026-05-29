@@ -246,7 +246,7 @@
   "edt_conf_dominant_oklch_neutral_scene_min_luma_title": "OKLCH: neutral pixel brightness threshold",
   "edt_conf_dominant_oklch_neutral_scene_min_luma_expl": "Minimum brightness for a low-saturation pixel to count as bright neutral scene content.",
   "edt_conf_dominant_oklch_min_colored_coverage_title": "OKLCH: minimum colored coverage",
-  "edt_conf_dominant_oklch_min_colored_coverage_expl": "If colored pixels cover less than this share while the scene is mostly neutral, OKLCH uses neutral average instead of a dominant hue.",
+  "edt_conf_dominant_oklch_min_colored_coverage_expl": "Minimum share of an LED area that must be meaningfully colored before OKLCH may select a dominant hue. Raise this to ignore tiny colored UI text, links, or accents in mostly neutral or dark scenes.",
   "edt_conf_dominant_oklch_dominant_brightness_blend_title": "OKLCH: dominant brightness blend",
   "edt_conf_dominant_oklch_dominant_brightness_blend_expl": "Controls brightness for the selected dominant hue. 0 uses whole-scene brightness, 1 uses the dominant colored pixels' brightness. Higher values keep large color regions vivid.",
   "edt_conf_color_leds_title": "LED index",

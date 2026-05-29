@@ -583,10 +583,11 @@ float3 ImageColorAveraging::calcDominantOklchMulticolorForLeds(const Image<Color
 
 	const float neutralSceneCoverage = (consideredPixelCount > 0) ? static_cast<float>(neutralScenePixelCount) / static_cast<float>(consideredPixelCount) : 0.0f;
 	const float coloredSceneCoverage = (consideredPixelCount > 0) ? static_cast<float>(coloredScenePixelCount) / static_cast<float>(consideredPixelCount) : 0.0f;
+	const bool hasEnoughColoredCoverage = coloredSceneCoverage >= _dominantColorConfig.oklchMinColoredCoverage;
 	const bool protectNeutralScene =
 		_dominantColorConfig.oklchNeutralSceneProtection &&
 		neutralSceneCoverage >= _dominantColorConfig.oklchNeutralSceneMinCoverage &&
-		coloredSceneCoverage <= _dominantColorConfig.oklchMinColoredCoverage;
+		!hasEnoughColoredCoverage;
 
 	if (protectNeutralScene && ambientWeight > 0.0001f)
 	{
@@ -620,7 +621,8 @@ float3 ImageColorAveraging::calcDominantOklchMulticolorForLeds(const Image<Color
 	const bool hasClearDominantHue =
 		bestHueWeight > 0.0001f &&
 		dominantShare >= OKLCH_MIN_DOMINANT_SHARE &&
-		hueCoherence >= OKLCH_MIN_HUE_COHERENCE;
+		hueCoherence >= OKLCH_MIN_HUE_COHERENCE &&
+		hasEnoughColoredCoverage;
 
 	if (hasClearDominantHue)
 	{
