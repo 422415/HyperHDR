@@ -51,9 +51,10 @@ _PKG_DIR = os.environ.get("AMBIENT_PERCEPTION_DIR", _DEFAULT_PKG_DIR)
 if _PKG_DIR not in sys.path:
     sys.path.insert(0, _PKG_DIR)
 
-_CONFIG = os.environ.get(
-    "AMBIENT_PERCEPTION_CONFIG", os.path.join(_PKG_DIR, "config.example.yaml")
-)
+# Optional YAML config. UNSET => use built-in defaults (full_frame streaming to
+# 127.0.0.1:19400) which need only numpy -- no pyyaml, no models. Set the env var
+# to a config.yaml only if you want to override host/port/mode/etc.
+_CONFIG = os.environ.get("AMBIENT_PERCEPTION_CONFIG") or None
 # Keybinding/profile id forwarded to animejanai_core (1002 == "balanced" in the
 # stock release). Override per profile via the env var if you wish.
 _KEYBINDING = int(os.environ.get("AMBIENT_KEYBINDING", "1002"))
@@ -82,7 +83,7 @@ def _frame_to_numpy(frame) -> "np.ndarray":
 
 
 def attach_ambient(clip: vs.VideoNode, source_clip: vs.VideoNode | None = None,
-                   config_path: str = _CONFIG, fps: float | None = None) -> vs.VideoNode:
+                   config_path: str | None = _CONFIG, fps: float | None = None) -> vs.VideoNode:
     """Return ``clip`` UNCHANGED, with an ambient-perception side-effect attached.
 
     The tap is spliced into ``clip``'s frame path (std.ModifyFrame), so it is
