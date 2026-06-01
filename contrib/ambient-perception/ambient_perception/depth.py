@@ -30,10 +30,16 @@ _IMAGENET_MEAN = np.array([0.485, 0.456, 0.406], dtype=np.float32)
 _IMAGENET_STD = np.array([0.229, 0.224, 0.225], dtype=np.float32)
 
 
-def _resize_bilinear(img: np.ndarray, size: int) -> np.ndarray:
+def _resize_bilinear(img: np.ndarray, size) -> np.ndarray:
+    """Bilinear resize. ``size`` is an int (square) or an ``(out_h, out_w)`` tuple.
+
+    NON-SQUARE SAFE: passing an int gives a square output (used for the square
+    model input); passing ``(h, w)`` resizes back to the real frame shape.
+    """
+    out_h, out_w = (size, size) if isinstance(size, int) else size
     h, w = img.shape[:2]
-    ys = np.linspace(0, h - 1, size)
-    xs = np.linspace(0, w - 1, size)
+    ys = np.linspace(0, h - 1, out_h)
+    xs = np.linspace(0, w - 1, out_w)
     y0 = np.floor(ys).astype(int)
     x0 = np.floor(xs).astype(int)
     y1 = np.minimum(y0 + 1, h - 1)
@@ -112,9 +118,8 @@ class DepthEstimator:
                 return np.ones((h, w), dtype=np.float32)
             near = d / rng                      # 1 = nearest (see ASSUMPTION)
             far = 1.0 - near                    # 1 = farthest
-            far = _resize_bilinear(far[..., None], h)[..., 0]
-            if far.shape != (h, w):
-                far = _resize_bilinear(far[..., None], h)[..., 0]
+            # Resize back to the REAL frame shape (h, w), not a square (h, h).
+            far = _resize_bilinear(far[..., None], (h, w))[..., 0]
             # Blend toward 1.0 by strength so depth is only a gentle nudge.
             far = 1.0 - self.strength * (1.0 - np.clip(far, 0.0, 1.0))
             return far.astype(np.float32)

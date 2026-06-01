@@ -415,9 +415,15 @@ class HyperHDRFlatClient:
 
     def close(self) -> None:
         if self._sock is not None:
+            sock = self._sock
+            # Best-effort clear; must NOT prevent the socket from being closed
+            # (a failed send on a dead socket would otherwise leak the FD).
             try:
                 self.clear()
-                self._sock.close()
+            except OSError:
+                pass
+            try:
+                sock.close()
             except OSError:
                 pass
             self._sock = None

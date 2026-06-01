@@ -154,10 +154,8 @@ class Segmenter:
         # If the model emitted logits (outside [0,1]), squash with a sigmoid.
         if arr.min() < -1e-3 or arr.max() > 1.0 + 1e-3:
             arr = 1.0 / (1.0 + np.exp(-arr))
-        mask = _resize_bilinear(arr[..., None], hw[0])[..., 0]
-        # _resize_bilinear is square; do a second pass for width if needed.
-        if mask.shape != hw:
-            mask = _resize_to(arr, hw)
+        # Resize the (square) model mask back to the real frame shape (h, w).
+        mask = _resize_to(arr, hw)
         return np.clip(mask, 0.0, 1.0).astype(np.float32)
 
 

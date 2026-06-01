@@ -1,8 +1,11 @@
 """OKLab color math, mirroring HyperHDR's C++ implementation.
 
-This is a small, pure-numpy port of the exact functions used by the
-``advanced_ambient`` C++ mode so the perception service produces colors that
-are bit-for-bit comparable (within float precision) to the baseline.
+This is a small, pure-numpy port of the functions used by the ``advanced_ambient``
+C++ mode so the perception service produces colors that CLOSELY match the
+baseline. Note it is not bit-exact: the C++ uses an approximate ``ufast_cbrt``
+(one Newton step) while this uses exact ``np.cbrt``; the difference is well under
+the ~0.01 round-trip error of HyperHDR's rounded inverse matrices, and the goal
+is to match HyperHDR's look, not its rounding.
 
 Sources mirrored (verified in the HyperHDR repo):
   * ``sources/infinite-color-engine/ColorSpace.cpp``
@@ -100,8 +103,8 @@ def srgb_linear_to_nonlinear(rgb: np.ndarray) -> np.ndarray:
 def linear_rgb_to_oklab(rgb: np.ndarray) -> np.ndarray:
     """Linear-light sRGB -> OKLab (L, a, b). Vectorized over (..., 3)."""
     lms = _apply_matrix(np.asarray(rgb, dtype=np.float64), _OKLAB_M1)
-    # cbrt that is correct for the (rare) negative lobe, matching ufast_cbrt's
-    # sign behaviour. np.cbrt handles negatives correctly.
+    # Exact cbrt (handles the rare negative LMS lobe of out-of-sRGB colors). The
+    # C++ ufast_cbrt is a faster approximation; see the module docstring.
     lms_cbrt = np.cbrt(lms)
     return _apply_matrix(lms_cbrt, _OKLAB_M2)
 

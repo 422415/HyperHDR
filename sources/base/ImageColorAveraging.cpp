@@ -428,14 +428,20 @@ float3 ImageColorAveraging::calcAmbientForLeds(const Image<ColorRgb>& image, con
 	const uint8_t* imgData = image.rawMem();
 	const float widthMinus1 = (_width > 1) ? static_cast<float>(_width - 1) : 1.0f;
 
-	// Pass A: luminance-weighted OKLab mean, chroma variance and a luminance-weighted horizontal centroid.
+	// Pass A: luminance-weighted OKLab mean + chroma variance, plus an UNWEIGHTED horizontal
+	// centroid of the zone. Using the zone's fixed geometry (not luminance) to pick the lamp side
+	// keeps the edge-falloff direction stable instead of flipping with scene content.
 	float weightSum = 0.0f;
 	float3 labSum(0, 0, 0);
 	float chromaSqSum = 0.0f;	// sum of w * (a^2 + b^2)
-	double centroidXNum = 0.0;	// sum of w * x
+	unsigned long long geomXSum = 0;
+	size_t geomCount = 0;
 
 	for (const uint32_t colorOffset : colors)
 	{
+		geomXSum += (colorOffset / 3) % _width;
+		++geomCount;
+
 		const byte3 nonlinear(imgData[colorOffset], imgData[colorOffset + 1], imgData[colorOffset + 2]);
 		const float3 nonlinear01 = static_cast<float3>(nonlinear) / 255.0f;
 		const float luma = 0.2126f * nonlinear01.x + 0.7152f * nonlinear01.y + 0.0722f * nonlinear01.z;
@@ -453,9 +459,6 @@ float3 ImageColorAveraging::calcAmbientForLeds(const Image<ColorRgb>& image, con
 		weightSum += weight;
 		labSum += lab * weight;
 		chromaSqSum += weight * (lab.y * lab.y + lab.z * lab.z);
-
-		const uint32_t x = (colorOffset / 3) % _width;
-		centroidXNum += static_cast<double>(weight) * x;
 	}
 
 	// Frame (or zone) carries essentially no light: fall back to the plain linear average so dark
@@ -471,7 +474,7 @@ float3 ImageColorAveraging::calcAmbientForLeds(const Image<ColorRgb>& image, con
 	const float variance = std::max(0.0f, (chromaSqSum / weightSum) - (meanA * meanA + meanB * meanB));
 	const float sigma = std::sqrt(variance);
 	const float invSigma = (sigma > 1e-4f) ? 1.0f / (AMBIENT_SIGMA_K * sigma) : 0.0f;
-	const bool leftSide = (centroidXNum / weightSum) < (_width * 0.5);
+	const bool leftSide = (geomCount == 0) || (static_cast<double>(geomXSum) / geomCount < (_width * 0.5));
 
 	// Pass B: re-accumulate with the edge-falloff and a soft sigma-clip around the chroma mean.
 	float weightSum2 = 0.0f;

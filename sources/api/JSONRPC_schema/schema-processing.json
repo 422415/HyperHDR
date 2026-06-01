@@ -12,7 +12,7 @@
 		},
 		"mappingType": {
 			"type" : "string",
-			"enum" : ["multicolor_mean", "unicolor_mean", "advanced", "weighted"]
+			"enum" : ["advanced", "advanced_vivid", "advanced_dominant", "advanced_ambient", "unicolor_mean", "multicolor_mean", "weighted"]
 		}
 	},
 	"additionalProperties": false
