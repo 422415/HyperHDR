@@ -66,10 +66,16 @@ from ambient_perception.service import get_async_runner  # noqa: E402
 
 
 def _frame_to_numpy(frame) -> "np.ndarray":
-    """Planar RGB24 VapourSynth frame -> (H, W, 3) uint8 array.
+    """Planar RGB24 VapourSynth frame -> (H, W, 3) uint8 array in R,G,B order.
 
-    VapourSynth RGB is PLANAR. TODO/ASSUMPTION: plane order is treated as R,G,B;
-    if your lights come out with red/blue swapped, reverse the plane order here.
+    Plane order is R,G,B: this is the SAME convention vs-mlrt consumes for the
+    animejanai upscale models, and those produce correct on-screen color -- so
+    reading planes [0,1,2] as R,G,B here is correct for this pipeline.
+
+    NOTE: this is unrelated to HyperHDR's LED `colorOrder` (e.g. "rgb"). That is
+    applied by HyperHDR at OUTPUT to the physical strip; we always send a normal
+    RGB image, and HyperHDR's colorOrder maps it to your LEDs. Two separate
+    stages. (Safety net: if red/blue ever look swapped, reverse this stack.)
     """
     planes = [np.asarray(frame[i]) for i in range(frame.format.num_planes)]
     return np.stack(planes, axis=-1).astype(np.uint8)

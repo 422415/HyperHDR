@@ -11,9 +11,22 @@ hyperhdr:
   duration_ms: -1        # -1 = infinite (held until the next frame arrives)
 
 # --- painted output image fed to HyperHDR -----------------------------------
-# A tiny image: LEFT half = left ambient color, RIGHT half = right ambient
-# color. HyperHDR's LED layout (two side LEDs, mapping "advanced") turns the
-# halves into the two physical light colors -- no per-LED protocol needed.
+# A tiny image painted from the per-zone colors, streamed over FlatBuffers.
+#
+# HOW ROUTING ACTUALLY WORKS (verified in HyperHDR source): the FlatBuffers feed
+# is a GLOBAL input (GlobalSignals::SignalSetGlobalImage), so EVERY instance
+# receives the SAME image and maps it through ITS OWN LED layout.
+#
+# YOUR DETECTED SETUP (from ~/.hyperhdr/db/hyperhdr.db):
+#   * 2 instances, each a "hyperk" device, colorOrder=rgb, 52 LEDs grouped
+#     (group:1) spanning the FULL width -> each instance = ONE whole-frame color.
+#   * So with your current layout BOTH lights average the WHOLE painted image.
+#
+# => To get TRUE per-side color (left light = left of screen), set each instance's
+#    LED layout to sample its half: instance 0 hmin 0.0..0.5, instance 1 0.5..1.0
+#    (keep them grouped so each stays one color). Then the left/right zones below
+#    map correctly. If you DON'T split the layouts, use the single-zone block at
+#    the bottom so both lights show one consistent whole-frame ambient color.
 output:
   width: 64
   height: 36
@@ -55,10 +68,19 @@ providers:
   - "CUDAExecutionProvider"
   - "CPUExecutionProvider"
 
-# --- zones (optional) -------------------------------------------------------
-# Default is a clean left/right split. Override for >2 lamps or custom bands.
-# Each zone: name, side ("left"/"right" -> which edge gets full edge weight),
-# x0/x1 = fractional horizontal band [0..1].
+# --- zones -------------------------------------------------------------------
+# Each zone: name, side ("left"/"right" -> which edge gets full edge-falloff
+# weight), x0/x1 = fractional horizontal band [0..1]. The painted image gets one
+# flat color per zone band.
+#
+# PER-SIDE (your stated goal): requires the per-instance LED-layout split noted
+# above (instance 0 -> left half, instance 1 -> right half).
 zones:
   - { name: "left",  side: "left",  x0: 0.0, x1: 0.5 }
   - { name: "right", side: "right", x0: 0.5, x1: 1.0 }
+
+# SINGLE WHOLE-FRAME COLOR (works with your CURRENT layout, zero HyperHDR changes
+# -- both lights show one background-aware color). To use it, comment out the two
+# zones above and uncomment this one:
+# zones:
+#   - { name: "all", side: "auto", x0: 0.0, x1: 1.0 }
