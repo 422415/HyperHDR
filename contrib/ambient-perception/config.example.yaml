@@ -10,6 +10,16 @@ hyperhdr:
   origin: "AmbientPerception"   # shown as the source name in HyperHDR
   duration_ms: -1        # -1 = infinite (held until the next frame arrives)
 
+# How to feed HyperHDR:
+#   full_frame  - stream the decoded mpv frame AS-IS and let HyperHDR run its own
+#                 LED mapping (advanced_ambient / dominant / classic / unicolor).
+#                 Simplest, works with every mapping mode and shows in the LED
+#                 Visualization + color-debug monitor. Enable HyperHDR's
+#                 "VapourSynth/mpv capture" toggle so the screen/USB grabbers stay off.
+#   ambient     - run perception here (segmentation + OKLab) and stream a painted
+#                 per-zone image (the 'zones' below). Advanced.
+stream_mode: full_frame
+
 # --- painted output image fed to HyperHDR -----------------------------------
 # A tiny image painted from the per-zone colors, streamed over FlatBuffers.
 #

@@ -63,7 +63,16 @@ class ServiceConfig:
     origin: str = "AmbientPerception"
     duration_ms: int = -1          # -1 = infinite (held until next frame)
 
-    # Painted output image fed to HyperHDR (LEFT half / RIGHT half).
+    # How to feed HyperHDR:
+    #   "full_frame" - stream the decoded mpv frame AS-IS; HyperHDR runs its own
+    #                  LED mapping (advanced_ambient / dominant / classic / ...).
+    #                  Simplest; works with every mapping mode + the color-debug
+    #                  monitor. Pair with the "VapourSynth/mpv capture" toggle.
+    #   "ambient"    - run the perception pipeline here (segmentation, OKLab
+    #                  ambient, temporal) and stream a painted per-zone image.
+    stream_mode: str = "full_frame"
+
+    # Painted output image fed to HyperHDR in "ambient" mode (per-zone colors).
     out_width: int = 64
     out_height: int = 36
 
@@ -158,6 +167,12 @@ class AmbientService:
         """
         if rgb_u8.dtype != np.uint8 or rgb_u8.ndim != 3 or rgb_u8.shape[2] != 3:
             raise ValueError("rgb_u8 must be an (H, W, 3) uint8 array")
+
+        # "full_frame": just hand the decoded frame to HyperHDR and let it do the
+        # LED mapping. No perception, no painting -- works with every mapping mode.
+        if self.cfg.stream_mode == "full_frame":
+            return self._stream_full_frame(rgb_u8)
+
         now_ms = pts_ms if pts_ms is not None else time.monotonic() * 1000.0
         h, w, _ = rgb_u8.shape
 
@@ -217,6 +232,24 @@ class AmbientService:
 
         return {"cut": scene_cut, "colors": srgb_dbg}
 
+    def _stream_full_frame(self, rgb_u8: np.ndarray) -> dict:
+        """Stream the decoded frame straight to HyperHDR (no perception/painting).
+
+        HyperHDR receives it as a normal capture image and applies whatever LED
+        mapping mode is configured. Enable the "VapourSynth/mpv capture" toggle in
+        HyperHDR so the internal screen/USB grabbers stay off and this is the source.
+        """
+        h, w, _ = rgb_u8.shape
+        client = self._ensure_client()
+        if client is not None:
+            try:
+                client.send_image(np.ascontiguousarray(rgb_u8).tobytes(), w, h,
+                                  self.cfg.duration_ms)
+            except OSError as exc:
+                logger.warning("HyperHDR send failed (%s); will reconnect.", exc)
+                self._client = None
+        return {"mode": "full_frame", "size": [w, h]}
+
     def _paint(self, side_rgb: dict[str, np.ndarray]) -> np.ndarray:
         """Paint the LEFT/RIGHT halves into the small output image.
 
@@ -270,6 +303,7 @@ def load_config(path: str) -> ServiceConfig:
         priority=int(hh.get("priority", 150)),
         origin=hh.get("origin", "AmbientPerception"),
         duration_ms=int(hh.get("duration_ms", -1)),
+        stream_mode=str(raw.get("stream_mode", "full_frame")),
         out_width=int(out.get("width", 64)),
         out_height=int(out.get("height", 36)),
         downscale=int(raw.get("downscale", 512)),
