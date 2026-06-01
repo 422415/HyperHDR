@@ -188,6 +188,20 @@ python -m pip install -r requirements.txt
   pip-install it into that environment. It's only listed (commented) for a
   standalone companion process.
 
+### Tests
+
+Behavior tests (need only `numpy`) validate the color math without any GPU/model:
+
+```bash
+cd contrib/ambient-perception
+python tests/test_ambient.py          # or: python -m pytest tests
+```
+
+They assert the headline guarantees on synthetic pixels: OKLab round-trips
+within tolerance; a small vivid red blob over a muted-green background yields a
+gentle green (not red, not neon); segmentation only strengthens that; and a
+background-starved zone reports starvation so the service falls back.
+
 ---
 
 ## Wiring into the animejanai VapourSynth chain
