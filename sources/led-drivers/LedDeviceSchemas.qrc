@@ -45,5 +45,6 @@
 		<file alias="schema-rpi_pio">schemas/schema-rpi_pio.json</file>
 		<file alias="schema-ddp">schemas/schema-ddp.json</file>
 		<file alias="schema-hyperk">schemas/schema-hyperk.json</file>
+		<file alias="schema-group">schemas/schema-group.json</file>
 	</qresource>
 </RCC>

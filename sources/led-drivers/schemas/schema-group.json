@@ -1,0 +1,47 @@
+{
+	"type":"object",
+	"required":true,
+	"properties":{
+		"devices": {
+			"type": "array",
+			"title":"edt_dev_spec_group_devices_title",
+			"required" : true,
+			"minItems": 1,
+			"items": {
+				"type": "object",
+				"title":"edt_dev_spec_group_device_title",
+				"properties": {
+					"type": {
+						"type": "string",
+						"title":"edt_dev_spec_group_childtype_title",
+						"default": "hyperk",
+						"required" : true,
+						"propertyOrder" : 1
+					},
+					"host": {
+						"type": "string",
+						"title":"edt_dev_spec_group_host_title",
+						"default": "",
+						"propertyOrder" : 2
+					},
+					"port": {
+						"type": "integer",
+						"title":"edt_dev_spec_group_port_title",
+						"default": 19446,
+						"propertyOrder" : 3
+					},
+					"colorOrder": {
+						"type": "string",
+						"title":"edt_dev_spec_group_colorOrder_title",
+						"enum": ["rgb","bgr","rbg","brg","gbr","grb"],
+						"default": "rgb",
+						"propertyOrder" : 4
+					}
+				},
+				"additionalProperties": true
+			},
+			"propertyOrder" : 1
+		}
+	},
+	"additionalProperties": true
+}
