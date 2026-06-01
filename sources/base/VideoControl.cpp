@@ -46,6 +46,8 @@ VideoControl::VideoControl(HyperHdrInstance* hyperhdr)
 	, _usbCaptName()
 	, _usbInactiveTimer(new QTimer(this))
 	, _isCEC(false)
+	, _vapoursynthMode(false)
+	, _videoInstanceEnable(true)
 {
 	// settings changes
 	connect(_hyperhdr, &HyperHdrInstance::SignalInstanceSettingsChanged, this, &VideoControl::handleSettingsUpdate);
@@ -58,7 +60,10 @@ VideoControl::VideoControl(HyperHdrInstance* hyperhdr)
 
 	_usbInactiveTimer->setInterval(800);
 
-	// init
+	// init: seed the external-capture flag from the system-control settings so the
+	// very first VIDEOCONTROL update already respects it.
+	_vapoursynthMode = _hyperhdr->getSetting(settings::type::SYSTEMCONTROL).object()["vapoursynthMode"].toBool(false);
+
 	QJsonDocument settings = _hyperhdr->getSetting(settings::type::VIDEOCONTROL);
 	QUEUE_CALL_2(this, handleSettingsUpdate, settings::type, settings::type::VIDEOCONTROL, QJsonDocument, settings);
 }
@@ -157,9 +162,18 @@ void VideoControl::handleSettingsUpdate(settings::type type, const QJsonDocument
 			_usbCaptPrio = obj["videoInstancePriority"].toInt(240);
 		}
 
-		setUsbCaptureEnable(obj["videoInstanceEnable"].toBool(true));
+		_videoInstanceEnable = obj["videoInstanceEnable"].toBool(true);
+		// External (VapourSynth/mpv) capture forces the USB grabber off for this instance.
+		setUsbCaptureEnable(_videoInstanceEnable && !_vapoursynthMode);
 		_isCEC = obj["cecControl"].toBool(false);
 		emit GlobalSignals::getInstance()->SignalRequestComponent(hyperhdr::COMP_CEC, int(_hyperhdr->getInstanceIndex()), _isCEC);
+	}
+	else if (type == settings::type::SYSTEMCONTROL)
+	{
+		// The "VapourSynth/mpv" capture toggle lives in the system-control settings; honor it here
+		// too so selecting it also disables the USB grabber (and re-enables it when cleared).
+		_vapoursynthMode = config.object()["vapoursynthMode"].toBool(false);
+		setUsbCaptureEnable(_videoInstanceEnable && !_vapoursynthMode);
 	}
 }
 
@@ -167,7 +181,8 @@ void VideoControl::handleCompStateChangeRequest(hyperhdr::Components component, 
 {
 	if (component == hyperhdr::COMP_VIDEOGRABBER)
 	{
-		setUsbCaptureEnable(enable);
+		// Refuse to enable the USB grabber while external (VapourSynth/mpv) capture is selected.
+		setUsbCaptureEnable(enable && !_vapoursynthMode);
 	}
 }
 

@@ -40,6 +40,8 @@ private:
 	QString	_usbCaptName;
 	QTimer*	_usbInactiveTimer;
 	bool	_isCEC;
+	bool	_vapoursynthMode;
+	bool	_videoInstanceEnable;
 
 	struct {
 		QMutex mutex;

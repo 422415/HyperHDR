@@ -43,6 +43,7 @@ SystemControl::SystemControl(HyperHdrInstance* hyperhdr)
 	, _sysCaptName()
 	, _sysInactiveTimer(new QTimer(this))
 	, _isCEC(false)
+	, _vapoursynthMode(false)
 {
 	// settings changes
 	connect(_hyperhdr, &HyperHdrInstance::SignalInstanceSettingsChanged, this, &SystemControl::handleSettingsUpdate);
@@ -122,13 +123,16 @@ void SystemControl::handleSettingsUpdate(settings::type type, const QJsonDocumen
 	if (type == settings::type::SYSTEMCONTROL)
 	{
 		const QJsonObject& obj = config.object();
+		// When VapourSynth/mpv (external) capture is selected, the internal screen
+		// grabber must never run for this instance.
+		_vapoursynthMode = obj["vapoursynthMode"].toBool(false);
 		if (_sysCaptPrio != obj["systemInstancePriority"].toInt(245))
 		{
 			setSysCaptureEnable(false); // clear prio
 			_sysCaptPrio = obj["systemInstancePriority"].toInt(245);
 		}
 
-		setSysCaptureEnable(obj["systemInstanceEnable"].toBool(false));
+		setSysCaptureEnable(obj["systemInstanceEnable"].toBool(false) && !_vapoursynthMode);
 		_isCEC = obj["cecControl"].toBool(false);
 		emit GlobalSignals::getInstance()->SignalRequestComponent(hyperhdr::COMP_CEC, -int(_hyperhdr->getInstanceIndex()) - 2, _isCEC);
 	}
@@ -138,7 +142,8 @@ void SystemControl::handleCompStateChangeRequest(hyperhdr::Components component,
 {
 	if (component == hyperhdr::COMP_SYSTEMGRABBER)
 	{
-		setSysCaptureEnable(enable);
+		// Refuse to enable the screen grabber while external (VapourSynth/mpv) capture is selected.
+		setSysCaptureEnable(enable && !_vapoursynthMode);
 	}
 }
 

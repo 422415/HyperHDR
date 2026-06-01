@@ -40,4 +40,5 @@ private:
 	QString	_sysCaptName;
 	QTimer*	_sysInactiveTimer;
 	bool	_isCEC;
+	bool	_vapoursynthMode;
 };

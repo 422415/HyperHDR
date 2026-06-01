@@ -3,7 +3,16 @@
 	"required" : true,
 	"title" : "edt_conf_instC_heading_title",
 	"properties" :
-	{		
+	{
+		"vapoursynthMode" :
+		{
+			"type" : "boolean",
+			"format": "checkbox",
+			"required" : true,
+			"title" : "edt_conf_instC_vapoursynth_title",
+			"default" : false,
+			"propertyOrder" : 0
+		},
 		"systemInstanceEnable" :
 		{
 			"type" : "boolean",
