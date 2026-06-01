@@ -217,6 +217,36 @@ class _Client:
         self.sock = None
 
 
+def _is_enabled(config):
+    """True if ambient is enabled, via env AMBIENT_ENABLE=1 or an [ambient]
+    enabled=true section in the parsed animejanai config passed in. Default OFF."""
+    if os.environ.get("AMBIENT_ENABLE", "").strip().lower() in ("1", "true", "yes", "on"):
+        return True
+    try:
+        sec = config.get("ambient") if hasattr(config, "get") else None
+        val = sec.get("enabled") if hasattr(sec, "get") else None
+        return str(val).strip().lower() in ("1", "true", "yes", "on")
+    except Exception:
+        return False
+
+
+def maybe_tap(clip, container_fps, config=None, host=None, port=None, downscale=256):
+    """Hook entry for animejanai_core: returns the clip tapped to HyperHDR if
+    enabled, else UNCHANGED. Add one line in animejanai_core.run_animejanai:
+
+        clip = __import__("ambient").maybe_tap(clip, container_fps, config)
+
+    Disabled by default, so it is a no-op for anyone not using HyperHDR. Never
+    raises -- on any problem it returns the clip untouched.
+    """
+    try:
+        if not _is_enabled(config):
+            return clip
+        return attach_ambient(clip, container_fps, host=host, port=port, downscale=downscale)
+    except Exception:
+        return clip
+
+
 def attach_ambient(clip, container_fps, host=None, port=None,
                    downscale=256, priority=150, origin="animejanai"):
     """Return ``clip`` UNCHANGED, with a HyperHDR ambient-stream side-effect.
