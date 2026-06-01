@@ -206,35 +206,70 @@ background-starved zone reports starvation so the service falls back.
 
 ## Wiring into the animejanai VapourSynth chain
 
-Open the `.vpy` that `mpv-upscale-2x_animejanai` loads (the upscale graph) and
-add one line right after you have the decoded source clip, **before** the
-vs-mlrt / TensorRT upscale node:
+This is matched to the **real release layout** (verified against the repo, not
+guessed). In `mpv-upscale-2x_animejanai`:
+
+- `portable_config/mpv.conf` toggles upscaling by applying a profile whose
+  `vf=vapoursynth="...animejanai/profiles/<name>.vpy":buffered-frames=1:concurrent-frames=8`.
+- Each `animejanai/profiles/<name>.vpy` is tiny and just calls the core:
+  ```python
+  import animejanai_core
+  animejanai_core.run_animejanai_with_keybinding(video_in, container_fps, 1002)
+  ```
+  mpv injects the `video_in` (source clip) and `container_fps` globals.
+
+`vapoursynth_sink.vpy` here is a drop-in that wraps `video_in` with a cheap
+~512 px RGB tap (spliced into the frame path via `std.ModifyFrame`, so it runs
+once per displayed frame, in sync) and then calls the exact same core entry
+point. The tap submits each frame to a **non-blocking background runner**, so
+model inference never stalls the upscale pipeline; the clip that gets upscaled
+is byte-identical to today.
+
+**Option A — add an Ambient profile (recommended, non-invasive):**
+
+1. Set env vars (e.g. in the launcher / a wrapper `.bat`):
+   ```bat
+   set AMBIENT_PERCEPTION_DIR=C:\path\to\HyperHDR\contrib\ambient-perception
+   set AMBIENT_PERCEPTION_CONFIG=C:\path\to\config.yaml
+   ```
+   (or copy the `ambient_perception` package next to your profiles so the default
+   path resolves).
+2. Copy `ambient_perception/vapoursynth_sink.vpy` to
+   `animejanai/profiles/animejanai_ambient.vpy`.
+3. Add an mpv profile + keybinding:
+   ```ini
+   # portable_config/mpv.conf
+   [upscale-on-ambient]
+   vf=vapoursynth="~~/../animejanai/profiles/animejanai_ambient.vpy":buffered-frames=1:concurrent-frames=8
+   ```
+   ```ini
+   # portable_config/input.conf  (pick any key)
+   F6 apply-profile upscale-on-ambient
+   ```
+   By default it runs the **balanced** chain (keybinding `1002`); set
+   `AMBIENT_KEYBINDING` to use a different profile id.
+
+**Option B — splice into a profile you already use:**
 
 ```python
-from ambient_perception.vapoursynth_sink import attach_ambient
+import animejanai_core
+from animejanai_ambient import attach_ambient   # the sink, on sys.path
 
-clip = video_in                     # decoded source from mpv
-clip = attach_ambient(clip)         # perceive the SOURCE (cheap, ~512px branch)
-clip = upscale_with_mlrt(clip)      # your existing vs-mlrt TensorRT 2x
-clip.set_output()
+clip = attach_ambient(video_in, fps=float(container_fps))   # perceive SOURCE
+animejanai_core.run_animejanai_with_keybinding(clip, container_fps, 1002)
 ```
 
-`attach_ambient` branches a downscaled RGB24 copy, runs perception per frame
-keyed by PTS, streams to HyperHDR, and returns your clip **unchanged** (the sink
-is side-effect only and never breaks playback -- exceptions are logged, not
-raised). Point it at your edited config:
-
-```python
-clip = attach_ambient(clip, config_path=r"C:/path/to/config.yaml")
-```
+`attach_ambient` returns `video_in` **unchanged** (side-effect only; exceptions
+are logged, never raised) and mirrors animejanai's own source-colorspace
+heuristic (`matrix_in_s = "170m"` if height < 720 else `"709"`).
 
 ### Companion-process design (no .vpy edit)
 
-If you don't want to touch the animejanai chain, run a separate process that
-decodes frames with its own `onnxruntime-gpu` / VapourSynth / ffmpeg pipeline and
-calls `AmbientService.process_frame(rgb_u8, pts_ms)` itself. Same service, same
-config; it just owns its frame source. This trades a second decode for zero
-coupling to animejanai.
+If you don't want to touch the animejanai chain at all, run a separate process
+that decodes frames with its own pipeline and calls
+`AmbientService.process_frame(rgb_u8, pts_ms)` (or `AsyncAmbientRunner.submit`).
+Same service, same config; it just owns its frame source. This trades a second
+decode for zero coupling to animejanai.
 
 ---
 

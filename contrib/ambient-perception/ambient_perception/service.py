@@ -29,6 +29,7 @@ process that decodes frames itself.
 from __future__ import annotations
 
 import logging
+import threading
 import time
 from dataclasses import dataclass, field
 
@@ -303,3 +304,66 @@ def get_service(config_path: str | None = None) -> AmbientService:
         cfg = load_config(config_path) if config_path else ServiceConfig()
         _SERVICE = AmbientService(cfg)
     return _SERVICE
+
+
+class AsyncAmbientRunner:
+    """Non-blocking front end for the VapourSynth sink.
+
+    The VapourSynth ``ModifyFrame`` callback runs on a playback worker thread, so
+    it must NOT do model inference inline (that would stall the upscale pipeline).
+    :meth:`submit` just stores the *latest* frame and returns immediately; a single
+    background thread runs :meth:`AmbientService.process_frame` on whatever the most
+    recent frame is. Intermediate frames are intentionally dropped -- for ambient
+    light only the current color matters, and dropping keeps us real-time.
+    """
+
+    def __init__(self, service: AmbientService) -> None:
+        self._service = service
+        self._lock = threading.Lock()
+        self._latest: tuple[np.ndarray, float | None] | None = None
+        self._event = threading.Event()
+        self._stop = False
+        self._thread = threading.Thread(
+            target=self._loop, name="ambient-perception", daemon=True
+        )
+        self._thread.start()
+
+    def submit(self, frame_rgb_u8: np.ndarray, pts_ms: float | None = None) -> None:
+        """Hand off the newest frame (cheap copy already done by the caller)."""
+        with self._lock:
+            self._latest = (frame_rgb_u8, pts_ms)
+        self._event.set()
+
+    def _loop(self) -> None:
+        while not self._stop:
+            self._event.wait(timeout=1.0)
+            self._event.clear()
+            with self._lock:
+                item, self._latest = self._latest, None
+            if item is None:
+                continue
+            frame, pts = item
+            try:
+                self._service.process_frame(frame, pts)
+            except Exception:  # never let the worker thread die
+                logger.exception("ambient-perception: frame processing failed")
+
+    def stop(self) -> None:
+        self._stop = True
+        self._event.set()
+        self._service.close()
+
+
+_RUNNER: AsyncAmbientRunner | None = None
+
+
+def get_async_runner(config_path: str | None = None) -> AsyncAmbientRunner:
+    """Return a process-wide :class:`AsyncAmbientRunner` (constructed once).
+
+    This is what the VapourSynth sink should call: ``submit()`` is non-blocking
+    so it never stalls the animejanai upscale pipeline.
+    """
+    global _RUNNER
+    if _RUNNER is None:
+        _RUNNER = AsyncAmbientRunner(get_service(config_path))
+    return _RUNNER

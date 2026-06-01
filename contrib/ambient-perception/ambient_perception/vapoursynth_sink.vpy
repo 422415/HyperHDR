@@ -1,141 +1,139 @@
-# vapoursynth_sink.vpy -- integrate ambient perception into the animejanai
-# VapourSynth chain.
+# vapoursynth_sink.vpy -- ambient perception tap for mpv-upscale-2x_animejanai.
 #
-# UNTESTED -- needs your GPU / VapourSynth / models. See README banner.
+# UNTESTED -- needs your GPU / VapourSynth / models. See the README banner.
+#
+# VERIFIED against the real animejanai release layout:
+#   * mpv loads a profile via  vf=vapoursynth="...animejanai/profiles/<name>.vpy"
+#     (portable_config/mpv.conf), which injects the globals `video_in` and
+#     `container_fps`.
+#   * Each profile is tiny, e.g. animejanai_balanced.vpy:
+#         import animejanai_core
+#         animejanai_core.run_animejanai_with_keybinding(video_in, container_fps, 1002)
+#   * run_animejanai converts the source with matrix_in_s = "170m" if height<720
+#     else "709"  (animejanai_core.py). We mirror that for our RGB tap.
 #
 # WHAT THIS DOES
-#   Branches a downscaled (~512px) copy of the SOURCE clip (PRE-upscale), runs
-#   the ambient-perception service on each frame keyed by PTS, and streams the
-#   two side colors to HyperHDR over FlatBuffers. The MAIN clip is returned
-#   UNCHANGED so your normal animejanai upscale path is untouched.
+#   Taps a downscaled (~512px) RGB copy of the SOURCE clip (pre-upscale) into the
+#   MAIN frame path via std.ModifyFrame, so the tap is pulled exactly once per
+#   displayed frame, in sync, WITHOUT altering the clip that gets upscaled. Each
+#   tapped frame is handed to a NON-BLOCKING background runner that does the
+#   perception + HyperHDR feed off-thread (so the upscale pipeline never stalls).
 #
-# HOW TO WIRE IT IN
-#   In mpv-upscale-2x_animejanai the upscale graph is defined in a .vpy that
-#   animejanai loads. Two integration options:
+# HDR CAVEAT: mpv tone-maps AFTER VapourSynth. For SDR anime the tap is correct.
+#   For HDR (PQ/HLG) sources, insert an approximate tonemap on the tap before
+#   sampling (see README "HDR tone-map caveat").
 #
-#   (A) Inline (this file): paste the `attach_ambient(clip, src)` call into your
-#       existing .vpy right after you have the decoded source `clip`, BEFORE the
-#       vs-mlrt / TensorRT upscale node. Return the upscaled clip as usual.
-#
-#   (B) Companion process (no .vpy edit): run a separate process that decodes
-#       frames with its own onnxruntime-gpu pipeline and calls
-#       AmbientService.process_frame(). Use this if you don't want to touch the
-#       animejanai chain. See README ("Companion-process design").
-#
-# IMPORTANT CAVEAT (HDR):
-#   mpv applies HDR tone-mapping AFTER VapourSynth. For SDR content the frames
-#   here are already display-referred and correct. For HDR content these frames
-#   are scene-referred (PQ/HLG) and will look wrong to the SDR ambient math.
-#   See README ("HDR tone-map caveat") for the approximation / framebuffer-tap
-#   options. The downscaled branch below requests RGB24; for HDR you must first
-#   apply an approximate tonemap (e.g. core.placebo.Tonemap or a fixed Hable
-#   curve) on the branch so the colors match what you see.
+# ------------------------------------------------------------------- install --
+# 1. Point AMBIENT_PERCEPTION_DIR at the folder that CONTAINS the
+#    `ambient_perception` package (this repo's contrib/ambient-perception), or
+#    rely on the default below if you copy this package next to your profiles.
+# 2. Copy config.example.yaml -> config.yaml, set your HyperHDR host/port and
+#    (optionally) model paths, and point AMBIENT_PERCEPTION_CONFIG at it.
+# 3. Either:
+#    (A) Save this file as animejanai/profiles/animejanai_ambient.vpy and add an
+#        mpv.conf profile:
+#            [upscale-on-ambient]
+#            vf=vapoursynth="~~/../animejanai/profiles/animejanai_ambient.vpy":buffered-frames=1:concurrent-frames=8
+#        then bind a key to `apply-profile upscale-on-ambient` in input.conf; or
+#    (B) In an existing profile .vpy, import attach_ambient() from here and wrap
+#        video_in before calling run_animejanai_with_keybinding (see bottom).
 
 import os
+import sys
+
 import vapoursynth as vs
 
 core = vs.core
 
-# --- locate the package + config -------------------------------------------
-# Adjust these two paths for your install.
-_PKG_DIR = os.path.dirname(os.path.abspath(__file__))          # this folder
-_REPO_DIR = os.path.dirname(os.path.dirname(_PKG_DIR))         # ...contrib/ambient-perception
-_CONFIG = os.path.join(_REPO_DIR, "config.example.yaml")       # copy to config.yaml & edit
+# --- locate the ambient_perception package + config -------------------------
+_DEFAULT_PKG_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_PKG_DIR = os.environ.get("AMBIENT_PERCEPTION_DIR", _DEFAULT_PKG_DIR)
+if _PKG_DIR not in sys.path:
+    sys.path.insert(0, _PKG_DIR)
 
-import sys
-if _REPO_DIR not in sys.path:
-    sys.path.insert(0, _REPO_DIR)
+_CONFIG = os.environ.get(
+    "AMBIENT_PERCEPTION_CONFIG", os.path.join(_PKG_DIR, "config.example.yaml")
+)
+# Keybinding/profile id forwarded to animejanai_core (1002 == "balanced" in the
+# stock release). Override per profile via the env var if you wish.
+_KEYBINDING = int(os.environ.get("AMBIENT_KEYBINDING", "1002"))
 
-import numpy as np
-from ambient_perception.service import get_service
-
-
-# Downscale target for the perception branch (longest side). Smaller = faster.
+# Downscale target for the perception tap (longest side). Smaller = cheaper.
 _DOWNSCALE = 512
+
+import numpy as np  # noqa: E402
+from ambient_perception.service import get_async_runner  # noqa: E402
 
 
 def _frame_to_numpy(frame) -> "np.ndarray":
-    """Convert a planar RGB24 VapourSynth frame to an (H, W, 3) uint8 array.
+    """Planar RGB24 VapourSynth frame -> (H, W, 3) uint8 array.
 
-    VapourSynth RGB frames are PLANAR (one plane per channel). We stack them
-    into interleaved HxWx3. Plane order for vs.RGB is R, G, B.
+    VapourSynth RGB is PLANAR. TODO/ASSUMPTION: plane order is treated as R,G,B;
+    if your lights come out with red/blue swapped, reverse the plane order here.
     """
     planes = [np.asarray(frame[i]) for i in range(frame.format.num_planes)]
     return np.stack(planes, axis=-1).astype(np.uint8)
 
 
-def attach_ambient(main_clip: vs.VideoNode, source_clip: vs.VideoNode | None = None,
-                   config_path: str = _CONFIG) -> vs.VideoNode:
-    """Attach the ambient sink to ``main_clip`` and return ``main_clip``.
+def attach_ambient(clip: vs.VideoNode, source_clip: vs.VideoNode | None = None,
+                   config_path: str = _CONFIG, fps: float | None = None) -> vs.VideoNode:
+    """Return ``clip`` UNCHANGED, with an ambient-perception side-effect attached.
+
+    The tap is spliced into ``clip``'s frame path (std.ModifyFrame), so it is
+    evaluated once per displayed frame, in order, but the returned frames are
+    ``clip``'s own frames -- the upscale path downstream is byte-identical.
 
     Parameters
     ----------
-    main_clip:
-        The clip you will continue to upscale and output. Returned unchanged.
-    source_clip:
-        The clip to perceive from (defaults to ``main_clip``). Pass the SOURCE
-        (pre-upscale) clip so perception runs at low res and stays cheap.
-    config_path:
-        Path to the YAML config (HyperHDR host/port, model paths, tau, etc.).
+    clip:          the clip you continue to upscale/output (returned unchanged).
+    source_clip:   what to perceive from (defaults to ``clip``); pass the SOURCE
+                   pre-upscale clip so perception stays cheap.
+    config_path:   YAML config path (HyperHDR host/port, models, tau, ...).
+    fps:           frames-per-second for PTS (use mpv's ``container_fps``).
     """
-    src = source_clip if source_clip is not None else main_clip
+    src = source_clip if source_clip is not None else clip
 
-    # Downscale + convert to RGB24 for the perception branch only.
-    longest = max(src.width, src.height)
-    scale = min(1.0, _DOWNSCALE / float(longest)) if longest else 1.0
+    # Mirror animejanai_core's source colorspace heuristic.
+    colorspace = "170m" if src.height < 720 else "709"
+
+    longest = max(src.width, src.height) or 1
+    scale = min(1.0, _DOWNSCALE / float(longest))
     tw = max(2, int(round(src.width * scale)) & ~1)
     th = max(2, int(round(src.height * scale)) & ~1)
+    tap = core.resize.Bilinear(src, width=tw, height=th, format=vs.RGB24,
+                               matrix_in_s=colorspace)
 
-    # TODO/ASSUMPTION: matrix_in_s depends on your source. "709" is correct for
-    # most modern anime; SD content may be "470bg"/"170m". For HDR, insert your
-    # tonemap BEFORE this point (see the module header caveat).
-    branch = core.resize.Bilinear(
-        src, width=tw, height=th, format=vs.RGB24, matrix_in_s="709",
+    runner = get_async_runner(config_path)
+
+    if fps is None:
+        fps = (src.fps_num / src.fps_den) if src.fps_den else 24.0
+    fps = float(fps) or 24.0
+
+    def _selector(n: int, f):
+        # f == [clip_frame, tap_frame]. Cheap copy + non-blocking submit; the
+        # heavy inference + HyperHDR send happen on the runner's worker thread.
+        try:
+            runner.submit(_frame_to_numpy(f[1]), pts_ms=(n / fps) * 1000.0)
+        except Exception as exc:  # never break playback for the sink
+            core.log_message(vs.MESSAGE_TYPE_WARNING, f"ambient-perception: {exc!r}")
+        return f[0]
+
+    return clip.std.ModifyFrame(clips=[clip, tap], selector=_selector)
+
+
+# --- profile entry point ----------------------------------------------------
+# When mpv loads this file as a vf=vapoursynth profile it injects `video_in` and
+# `container_fps`. Importing this module elsewhere (e.g. tests) skips this block.
+if "video_in" in globals():
+    import animejanai_core  # provided on sys.path by the animejanai install
+
+    tapped = attach_ambient(video_in, fps=float(container_fps))  # noqa: F821
+    animejanai_core.run_animejanai_with_keybinding(
+        tapped, container_fps, _KEYBINDING  # noqa: F821
     )
 
-    def _eval(n: int, f: vs.VideoFrame):
-        # Runs on VapourSynth's worker thread per frame. We compute PTS from
-        # the frame number and the clip fps so dt-correctness holds even when
-        # rendered faster/slower than realtime.
-        fps = (branch.fps_num / branch.fps_den) if branch.fps_den else 24.0
-        pts_ms = (n / fps) * 1000.0 if fps else float(n) * 41.7
-        try:
-            svc = get_service(config_path)
-            rgb = _frame_to_numpy(f)
-            svc.process_frame(rgb, pts_ms=pts_ms)
-        except Exception as exc:  # never break playback because of the sink
-            vs.core.log_message(vs.MESSAGE_TYPE_WARNING,
-                                f"ambient-perception: {exc!r}")
-        return f  # passthrough; we only use the branch for its side effect
-
-    # FrameEval-style sink: we modify the BRANCH (side-effect only) but DISCARD
-    # it; the function returns `main_clip` so the upscale path is unaffected.
-    _ = core.std.ModifyFrame(branch, clips=branch, selector=_eval)
-    # NOTE: ModifyFrame is lazy -- frames are only produced when something pulls
-    # them. To guarantee the sink runs in lockstep with playback, splice the
-    # side-effect into the OUTPUT clip via FrameEval keyed on the same n:
-
-    sink = core.std.ModifyFrame(branch, clips=branch, selector=_eval)
-
-    def _passthrough(n: int):
-        # Force the sink frame to be realized for frame n, then return main.
-        sink.get_frame(n)
-        return main_clip
-
-    return core.std.FrameEval(main_clip, _passthrough)
-
-
-# ---------------------------------------------------------------------------
-# Example usage inside your animejanai .vpy:
-#
-#   clip = video_in                      # decoded source from mpv
-#   clip = attach_ambient(clip)          # <-- add this line (perceives source)
-#   clip = upscale_with_mlrt(clip)       # your existing vs-mlrt TensorRT 2x
-#   clip.set_output()
-#
-# If you keep separate handles to the source and upscaled clips:
-#
-#   upscaled = upscale_with_mlrt(src)
-#   upscaled = attach_ambient(upscaled, source_clip=src)
-#   upscaled.set_output()
-# ---------------------------------------------------------------------------
+# --- alternative: splice into your OWN profile .vpy -------------------------
+#   import animejanai_core
+#   from animejanai.profiles.animejanai_ambient import attach_ambient  # or sys.path
+#   animejanai_core.run_animejanai_with_keybinding(
+#       attach_ambient(video_in, fps=float(container_fps)), container_fps, 1002)
