@@ -7,13 +7,12 @@ weight, exactly as described in the algorithm spec.
 
 The two-pass structure is identical to the C++:
 
-  Pass A  luminance-weighted OKLab mean + chroma variance (for the sigma clip)
-          and a luminance-weighted horizontal centroid (to pick the lamp side).
-  Pass B  re-accumulate with edge-falloff + a Tukey soft sigma-clip on chroma.
+  Pass A  luminance-weighted OKLab mean + chroma variance (for the sigma clip).
+  Pass B  re-accumulate with a Tukey soft sigma-clip on chroma.
   Shape   soft chroma deadzone + ceiling, L carried untouched.
 
-Weighting (spec step 2):
-    w = linearLuma * visible * bgConfidence * edgeFalloff   (* farDepth)
+Weighting:
+    w = linearLuma * visible * bgConfidence   (* farDepth)
   where the C++ baseline uses ``linearLuma * visible`` only; bgConfidence and
   farDepth are the premium perception additions and collapse to 1.0 when no
   model is loaded, recovering the exact baseline behaviour.
@@ -34,7 +33,6 @@ from . import oklab
 # Tuning constants (defaults mirror ImageColorAveraging.cpp / the schema).
 # ---------------------------------------------------------------------------
 AMBIENT_CDEAD = 0.012      # OKLab chroma deadzone ("tints weaker than this -> neutral")
-AMBIENT_EDGE_MIN = 0.20    # weight floor far from the lamp's screen edge
 AMBIENT_SIGMA_K = 2.5      # soft sigma-clip radius (chroma std-devs)
 
 # Visibility ramp constants (calcAmbientForLeds): clamp((luma-0.025)/0.18,0,1).
@@ -48,7 +46,6 @@ class AmbientConfig:
 
     chroma_dead: float = AMBIENT_CDEAD          # Cdead
     chroma_max: float = 0.06                     # Cmax / "ambientTintStrength"
-    edge_min: float = AMBIENT_EDGE_MIN
     sigma_k: float = AMBIENT_SIGMA_K
     # Below this surviving background weight (sum of w), treat the zone as a
     # full-frame close-up and let the caller decide on a fallback.
@@ -69,12 +66,6 @@ class AmbientResult:
     # True when bgConfidence wiped out essentially everything (full-frame
     # close-up): the caller should fall back to a whole-frame estimate / hold.
     background_starved: bool = False
-
-
-def _smoothstep(edge0: float, edge1: float, x: np.ndarray) -> np.ndarray:
-    """Mirror of smoothstepf() in ImageColorAveraging.cpp."""
-    t = np.clip((x - edge0) / (edge1 - edge0), 0.0, 1.0)
-    return t * t * (3.0 - 2.0 * t)
 
 
 def _luma_and_visibility(rgb_u8: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
@@ -109,10 +100,9 @@ def estimate_side(
         ``(H, W, 3)`` uint8 sRGB region for this side (already cropped to the
         left or right half / zone of the downscaled frame).
     side:
-        ``"left"`` or ``"right"`` -- selects which screen edge gets full
-        edge-falloff weight. (The C++ derives this from a luminance-weighted
-        centroid; here the caller already knows the geometry, but we still
-        compute the centroid as a sanity fallback when ``side`` is "auto".)
+        Retained for API compatibility; no longer affects the estimate. The
+        ambient color is a single whole-zone value (matches the simplified C++
+        ``advanced_ambient``, which no longer applies an edge-falloff).
     bg_confidence:
         ``(H, W)`` float in [0,1] = ``1 - foregroundMask``. None => all 1.0
         (baseline behaviour / no segmentation model).
@@ -162,22 +152,7 @@ def estimate_side(
     sigma = np.sqrt(variance)
     inv_sigma = 1.0 / (cfg.sigma_k * sigma) if sigma > 1e-4 else 0.0
 
-    # Resolve side (centroid fallback mirrors the C++ leftSide decision).
-    if side == "auto":
-        xs = np.arange(w, dtype=np.float64)
-        col_w = weight_a.sum(axis=0)
-        centroid_x = float((xs * col_w).sum() / wsum)
-        left_side = centroid_x < (w * 0.5)
-    else:
-        left_side = side == "left"
-
-    # --- Pass B: edge-falloff + Tukey soft sigma-clip on chroma ------------
-    width_minus1 = float(w - 1) if w > 1 else 1.0
-    fx = np.arange(w, dtype=np.float64) / width_minus1      # (W,)
-    edge_dist = fx if left_side else (1.0 - fx)
-    edge_weight_row = 1.0 - (1.0 - cfg.edge_min) * _smoothstep(0.08, 0.5, edge_dist)
-    edge_weight = np.broadcast_to(edge_weight_row, (h, w))
-
+    # --- Pass B: Tukey soft sigma-clip on chroma ---------------------------
     if inv_sigma > 0.0:
         da = a - mean_a
         db = b - mean_b
@@ -186,7 +161,7 @@ def estimate_side(
     else:
         tukey = np.ones((h, w), dtype=np.float64)
 
-    weight_b = weight_a * edge_weight * tukey
+    weight_b = weight_a * tukey
     wsum2 = float(weight_b.sum())
     if wsum2 > cfg.min_weight:
         out_lab = (lab * weight_b[..., None]).reshape(-1, 3).sum(axis=0) / wsum2

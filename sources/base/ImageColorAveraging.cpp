@@ -47,14 +47,7 @@ namespace
 
 	// "advanced_ambient" tuning constants (see the ambient-lighting vision doc).
 	constexpr float AMBIENT_CDEAD = 0.012f;   // OKLab chroma deadzone: tints weaker than this snap toward neutral
-	constexpr float AMBIENT_EDGE_MIN = 0.20f; // weight floor for pixels far from the screen edge nearest the lamp
 	constexpr float AMBIENT_SIGMA_K = 2.5f;   // soft sigma-clip radius (in chroma std-devs) for outlier rejection
-
-	inline float smoothstepf(float edge0, float edge1, float x)
-	{
-		const float t = std::clamp((x - edge0) / (edge1 - edge0), 0.0f, 1.0f);
-		return t * t * (3.0f - 2.0f * t);
-	}
 
 	int colorToHueBin(const float3& color, float maxComponent, float chroma)
 	{
@@ -408,12 +401,11 @@ float3 ImageColorAveraging::calcDominantMulticolorForLeds(const Image<ColorRgb>&
 }
 
 // "advanced_ambient": estimate the ambient light the scene casts, drawn from its background, as a
-// single robust, continuous, brightness-faithful and chroma-restrained color per LED zone.
+// single robust, continuous, brightness-faithful and chroma-restrained color for the zone (typically
+// the whole frame -- both side lamps then show the same scene-ambient color).
 //
 //  - Weight pixels by emitted light (linear luminance x visibility), NOT by saturation, so a large
 //    dim background outvotes a small vivid foreground (e.g. a character's costume).
-//  - Add a horizontal edge-falloff so pixels nearest the screen edge by the lamp count most (bias-light
-//    geometry), which survives LED-layout regeneration unlike a manual region edit.
 //  - Estimate a luminance-weighted mean in OKLab with one soft sigma-clip pass that continuously demotes
 //    a small saturated blob as a chroma outlier (no winner-take-all argmax => no rapid hue flips).
 //  - Shape chroma with a single control: a soft neutral deadzone + ceiling => "gentle, not neon".
@@ -426,22 +418,14 @@ float3 ImageColorAveraging::calcAmbientForLeds(const Image<ColorRgb>& image, con
 	}
 
 	const uint8_t* imgData = image.rawMem();
-	const float widthMinus1 = (_width > 1) ? static_cast<float>(_width - 1) : 1.0f;
 
-	// Pass A: luminance-weighted OKLab mean + chroma variance, plus an UNWEIGHTED horizontal
-	// centroid of the zone. Using the zone's fixed geometry (not luminance) to pick the lamp side
-	// keeps the edge-falloff direction stable instead of flipping with scene content.
+	// Pass A: luminance-weighted OKLab mean + chroma variance (the variance feeds the sigma-clip).
 	float weightSum = 0.0f;
 	float3 labSum(0, 0, 0);
 	float chromaSqSum = 0.0f;	// sum of w * (a^2 + b^2)
-	unsigned long long geomXSum = 0;
-	size_t geomCount = 0;
 
 	for (const uint32_t colorOffset : colors)
 	{
-		geomXSum += (colorOffset / 3) % _width;
-		++geomCount;
-
 		const byte3 nonlinear(imgData[colorOffset], imgData[colorOffset + 1], imgData[colorOffset + 2]);
 		const float3 nonlinear01 = static_cast<float3>(nonlinear) / 255.0f;
 		const float luma = 0.2126f * nonlinear01.x + 0.7152f * nonlinear01.y + 0.0722f * nonlinear01.z;
@@ -474,9 +458,9 @@ float3 ImageColorAveraging::calcAmbientForLeds(const Image<ColorRgb>& image, con
 	const float variance = std::max(0.0f, (chromaSqSum / weightSum) - (meanA * meanA + meanB * meanB));
 	const float sigma = std::sqrt(variance);
 	const float invSigma = (sigma > 1e-4f) ? 1.0f / (AMBIENT_SIGMA_K * sigma) : 0.0f;
-	const bool leftSide = (geomCount == 0) || (static_cast<double>(geomXSum) / geomCount < (_width * 0.5));
 
-	// Pass B: re-accumulate with the edge-falloff and a soft sigma-clip around the chroma mean.
+	// Pass B: re-accumulate with a soft sigma-clip around the chroma mean (continuously demotes a
+	// small saturated blob -- e.g. a costume -- as an outlier).
 	float weightSum2 = 0.0f;
 	float3 labSum2(0, 0, 0);
 
@@ -497,16 +481,12 @@ float3 ImageColorAveraging::calcAmbientForLeds(const Image<ColorRgb>& image, con
 
 		const float3 lab = ColorSpaceMath::linear_rgb_to_oklab(linear);
 
-		const float fx = static_cast<float>((colorOffset / 3) % _width) / widthMinus1;
-		const float edgeDist = leftSide ? fx : (1.0f - fx);
-		const float edgeWeight = 1.0f - (1.0f - AMBIENT_EDGE_MIN) * smoothstepf(0.08f, 0.5f, edgeDist);
-
 		const float da = lab.y - meanA;
 		const float db = lab.z - meanB;
 		const float dist2 = (da * da + db * db) * invSigma * invSigma;
 		const float tukey = (invSigma > 0.0f) ? 1.0f / (1.0f + dist2) : 1.0f;
 
-		const float weight = baseWeight * edgeWeight * tukey;
+		const float weight = baseWeight * tukey;
 		weightSum2 += weight;
 		labSum2 += lab * weight;
 	}

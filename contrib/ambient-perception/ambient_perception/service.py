@@ -74,7 +74,6 @@ class ServiceConfig:
     # Ambient math
     chroma_max: float = 0.06       # Cmax / tint strength
     chroma_dead: float = 0.012     # Cdead
-    edge_min: float = 0.20
     sigma_k: float = 2.5
 
     # Temporal
@@ -89,10 +88,10 @@ class ServiceConfig:
 
     providers: list[str] | None = None
 
-    # Zones (defaults: clean left/right split).
+    # Zones (default: one whole-frame color -- both lamps show the same
+    # scene-ambient color, matching the user's two-instance whole-frame setup).
     zones: list[Zone] = field(default_factory=lambda: [
-        Zone("left", "left", 0.0, 0.5),
-        Zone("right", "right", 0.5, 1.0),
+        Zone("all", "auto", 0.0, 1.0),
     ])
 
 
@@ -104,7 +103,6 @@ class AmbientService:
         self._ambient_cfg = ambient.AmbientConfig(
             chroma_dead=cfg.chroma_dead,
             chroma_max=cfg.chroma_max,
-            edge_min=cfg.edge_min,
             sigma_k=cfg.sigma_k,
         )
         self._segmenter = Segmenter(cfg.segmentation_model, cfg.providers)
@@ -277,7 +275,6 @@ def load_config(path: str) -> ServiceConfig:
         downscale=int(raw.get("downscale", 512)),
         chroma_max=float(amb.get("chroma_max", 0.06)),
         chroma_dead=float(amb.get("chroma_dead", 0.012)),
-        edge_min=float(amb.get("edge_min", 0.20)),
         sigma_k=float(amb.get("sigma_k", 2.5)),
         tau_ms=float(temporal.get("tau_ms", 650.0)),
         cut_sensitivity=float(temporal.get("cut_sensitivity", 4.0)),

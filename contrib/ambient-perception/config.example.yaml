@@ -39,7 +39,6 @@ downscale: 512
 ambient:
   chroma_max: 0.06       # Cmax / "tint strength" (OKLab units). Lower = gentler.
   chroma_dead: 0.012     # Cdead soft neutral deadzone (tints weaker than this -> grey)
-  edge_min: 0.20         # weight floor for pixels far from the lamp's screen edge
   sigma_k: 2.5           # soft sigma-clip radius (chroma std-devs) for outlier rejection
 
 # --- temporal stabilization -------------------------------------------------
@@ -69,18 +68,15 @@ providers:
   - "CPUExecutionProvider"
 
 # --- zones -------------------------------------------------------------------
-# Each zone: name, side ("left"/"right" -> which edge gets full edge-falloff
-# weight), x0/x1 = fractional horizontal band [0..1]. The painted image gets one
-# flat color per zone band.
-#
-# PER-SIDE (your stated goal): requires the per-instance LED-layout split noted
-# above (instance 0 -> left half, instance 1 -> right half).
+# Each zone paints one flat color into its fractional horizontal band [x0,x1] of
+# the streamed image. DEFAULT = one whole-frame color: both instances average it
+# to the SAME scene-ambient color (matches your two-instance whole-frame setup,
+# zero HyperHDR layout changes). `side` is unused now (the estimate is whole-zone).
 zones:
-  - { name: "left",  side: "left",  x0: 0.0, x1: 0.5 }
-  - { name: "right", side: "right", x0: 0.5, x1: 1.0 }
+  - { name: "all", side: "auto", x0: 0.0, x1: 1.0 }
 
-# SINGLE WHOLE-FRAME COLOR (works with your CURRENT layout, zero HyperHDR changes
-# -- both lights show one background-aware color). To use it, comment out the two
-# zones above and uncomment this one:
+# Per-side alternative (only if you later split each instance's LED layout to its
+# own half -- inst0 hmin 0..0.5, inst1 0.5..1.0). Then use:
 # zones:
-#   - { name: "all", side: "auto", x0: 0.0, x1: 1.0 }
+#   - { name: "left",  side: "left",  x0: 0.0, x1: 0.5 }
+#   - { name: "right", side: "right", x0: 0.5, x1: 1.0 }
