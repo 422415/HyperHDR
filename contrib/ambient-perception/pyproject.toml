@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ambient-perception"
+version = "0.1.0"
+description = "GPU ambient-perception bias-lighting service for HyperHDR (anime/animejanai)"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "numpy>=1.24",
+    "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+# GPU inference. See requirements.txt for the RTX 5090 / Blackwell note.
+gpu = ["onnxruntime-gpu>=1.18"]
+cpu = ["onnxruntime>=1.18"]
+# Only needed to re-run the byte-for-byte encoder verification or regenerate
+# bindings; the runtime FlatBuffers feed is hand-rolled and needs nothing.
+dev = ["flatbuffers>=23.0"]
+
+[tool.setuptools]
+packages = ["ambient_perception"]
+
+[tool.setuptools.package-data]
+ambient_perception = ["*.vpy"]

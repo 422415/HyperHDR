@@ -9,9 +9,9 @@
 			"type" : "string",
 			"required" : true,
 			"title" : "edt_conf_color_imageToLedMappingType_title",
-			"enum" : ["advanced", "advanced_vivid", "advanced_dominant", "unicolor_mean"],
+			"enum" : ["advanced", "advanced_vivid", "advanced_dominant", "advanced_ambient", "unicolor_mean"],
 			"options" : {
-				"enum_titles" : ["edt_conf_enum_multicolor_advanced", "edt_conf_enum_multicolor_advanced_vivid", "edt_conf_enum_multicolor_advanced_dominant", "edt_conf_enum_unicolor_mean"]
+				"enum_titles" : ["edt_conf_enum_multicolor_advanced", "edt_conf_enum_multicolor_advanced_vivid", "edt_conf_enum_multicolor_advanced_dominant", "edt_conf_enum_multicolor_advanced_ambient", "edt_conf_enum_unicolor_mean"]
 			},
 			"default"  : "advanced",
 			"propertyOrder" : 1
@@ -24,6 +24,57 @@
 			"default" : false,
 			"required" : true,
 			"propertyOrder" : 2
+		},
+		"ambientTintStrength" :
+		{
+			"type" : "number",
+			"format": "stepper",
+			"step" : 0.005,
+			"title" : "edt_conf_color_ambientTintStrength_title",
+			"required" : true,
+			"minimum" : 0,
+			"maximum": 0.12,
+			"default" : 0.06,
+			"options": {
+				"dependencies": {
+					"imageToLedMappingType": "advanced_ambient"
+				}
+			},
+			"propertyOrder" : 30
+		},
+		"ambientSettlingMs" :
+		{
+			"type" : "number",
+			"format": "stepper",
+			"step" : 25,
+			"title" : "edt_conf_color_ambientSettlingMs_title",
+			"required" : true,
+			"minimum" : 100,
+			"maximum": 2000,
+			"default" : 650,
+			"options": {
+				"dependencies": {
+					"imageToLedMappingType": "advanced_ambient"
+				}
+			},
+			"propertyOrder" : 31
+		},
+		"ambientCutSensitivity" :
+		{
+			"type" : "number",
+			"format": "stepper",
+			"step" : 0.5,
+			"title" : "edt_conf_color_ambientCutSensitivity_title",
+			"required" : true,
+			"minimum" : 1.5,
+			"maximum": 12,
+			"default" : 4.0,
+			"options": {
+				"dependencies": {
+					"imageToLedMappingType": "advanced_ambient"
+				}
+			},
+			"propertyOrder" : 32
 		},
 		"channelAdjustment" :
 		{

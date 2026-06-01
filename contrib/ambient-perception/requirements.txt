@@ -1,0 +1,23 @@
+# Ambient perception service -- Python dependencies.
+#
+# Core (always needed):
+numpy>=1.24
+pyyaml>=6.0
+
+# GPU inference. Use the GPU build with TensorRT + CUDA execution providers.
+# On an RTX 5090 (Blackwell, sm_120) you need a recent ORT + CUDA 12.x / TensorRT
+# build; check the onnxruntime release notes for Blackwell support and match it
+# to your installed CUDA/TensorRT. The CPU package will run (slowly) as a
+# fallback if the GPU one is unavailable.
+onnxruntime-gpu>=1.18 ; platform_system != "Darwin"
+# onnxruntime            # CPU-only fallback (uncomment if you have no CUDA)
+
+# VapourSynth is OPTIONAL and is normally provided by your mpv-upscale /
+# animejanai install -- do NOT pip-install it into that environment. Only
+# install it here if you run a standalone companion process that imports it.
+# vapoursynth
+
+# The FlatBuffers feed is hand-rolled (see hyperhdr_client.py) and needs NO
+# flatbuffers package at runtime. The 'flatbuffers' pip package is only needed
+# if you regenerate bindings or run the byte-for-byte encoder test.
+# flatbuffers>=23.0

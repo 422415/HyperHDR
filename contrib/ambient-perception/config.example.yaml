@@ -1,0 +1,64 @@
+# Ambient perception service -- example configuration.
+# Copy to config.yaml and edit. All model paths are OPTIONAL: if a model file
+# is missing the service degrades gracefully (see README "Graceful fallback").
+
+# --- HyperHDR FlatBuffers grabber feed --------------------------------------
+hyperhdr:
+  host: "127.0.0.1"      # where HyperHDR runs
+  port: 19400            # VERIFIED default flatbuffers port (schema-flatbufServer.json)
+  priority: 150          # MUST be in [50, 250] (HyperHDR rejects outside this range)
+  origin: "AmbientPerception"   # shown as the source name in HyperHDR
+  duration_ms: -1        # -1 = infinite (held until the next frame arrives)
+
+# --- painted output image fed to HyperHDR -----------------------------------
+# A tiny image: LEFT half = left ambient color, RIGHT half = right ambient
+# color. HyperHDR's LED layout (two side LEDs, mapping "advanced") turns the
+# halves into the two physical light colors -- no per-LED protocol needed.
+output:
+  width: 64
+  height: 36
+
+# --- perception branch downscale (longest side, px) -------------------------
+# The .vpy / companion does the actual resize; perception runs at this size.
+downscale: 512
+
+# --- ambient color math (mirrors the C++ advanced_ambient defaults) ---------
+ambient:
+  chroma_max: 0.06       # Cmax / "tint strength" (OKLab units). Lower = gentler.
+  chroma_dead: 0.012     # Cdead soft neutral deadzone (tints weaker than this -> grey)
+  edge_min: 0.20         # weight floor for pixels far from the lamp's screen edge
+  sigma_k: 2.5           # soft sigma-clip radius (chroma std-devs) for outlier rejection
+
+# --- temporal stabilization -------------------------------------------------
+temporal:
+  tau_ms: 650.0          # EMA settling time constant (bigger = calmer/slower)
+  cut_sensitivity: 4.0   # k: cut threshold = max(0.02, k * median_recent_distance)
+
+# --- models (all optional) --------------------------------------------------
+models:
+  # Foreground/character segmentation (LOAD-BEARING for the premium path).
+  # Recommended: SkyTNT anime-segmentation (isnetis.onnx). Absent => bgConf=1
+  # everywhere (= the C++ baseline / whole-frame estimate).
+  segmentation: null     # e.g. "C:/models/isnetis.onnx"
+
+  # Optional Depth-Anything-V2 ONNX. Absent => no depth weighting.
+  depth: null            # e.g. "C:/models/depth_anything_v2_vits.onnx"
+  depth_strength: 0.5    # 0 = depth disabled, 1 = full far/near weighting
+
+  # Optional TransNetV2 ONNX scene-cut model (OR-ed with the histogram cut).
+  transnet: null         # e.g. "C:/models/transnetv2.onnx"
+
+# --- onnxruntime execution providers (order = priority) ---------------------
+# Comment out to use the package default (TensorRT -> CUDA -> CPU).
+providers:
+  - "TensorrtExecutionProvider"
+  - "CUDAExecutionProvider"
+  - "CPUExecutionProvider"
+
+# --- zones (optional) -------------------------------------------------------
+# Default is a clean left/right split. Override for >2 lamps or custom bands.
+# Each zone: name, side ("left"/"right" -> which edge gets full edge weight),
+# x0/x1 = fractional horizontal band [0..1].
+zones:
+  - { name: "left",  side: "left",  x0: 0.0, x1: 0.5 }
+  - { name: "right", side: "right", x0: 0.5, x1: 1.0 }
