@@ -22,17 +22,27 @@ Copy **`ambient.py`** into your animejanai **core** folder, next to
 `…\mpv-upscale-2x_animejanai-…\animejanai\core\ambient.py`
 
 ### 2. Add one line to `animejanai_core.py`
-In `run_animejanai` (the function the profiles call), right after the working
-`clip` exists and **before** the upscale resize, add:
+In `run_animejanai_with_keybinding` (the function your profiles call), right after
+the `init()` line at the top — that's where the module‑global `config` is loaded:
 
 ```python
-clip = __import__("ambient").maybe_tap(clip, container_fps, config)
+def run_animejanai_with_keybinding(clip, container_fps, keybinding):
+
+    init()  # testing
+
+    clip = __import__("ambient").maybe_tap(clip, container_fps, config)   # <-- add this
+    ...
 ```
 
-That's it. `maybe_tap` returns the clip **unchanged** unless ambient is enabled, so
-this line is a guaranteed no‑op for anyone who doesn't turn it on. (Pass whatever
-your config object is called; if `run_animejanai` doesn't have one in scope, use
-`maybe_tap(clip, container_fps)` and enable via the env var below.)
+That's the whole integration. `maybe_tap` returns the clip **unchanged** unless
+ambient is enabled, so this line is a guaranteed no‑op for anyone who doesn't turn
+it on, and the source frame is tapped once before any upscale chain runs.
+
+**Don't want to hand‑edit?** This folder ships `animejanai_core.PATCHED.py` — your
+v3.2.0 core with exactly that one line already added. Back up your
+`animejanai\core\animejanai_core.py`, then drop this in renamed to
+`animejanai_core.py`. (Use this only if your core matches v3.2.0; otherwise add the
+one line above.)
 
 ### 3. Flip the flag
 Two ways, pick one:
