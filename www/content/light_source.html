@@ -545,7 +545,45 @@
 								</div>
 							</div>
 						</div>
-						<div id="texfield_panel" class="accordion-item">
+						<div class="accordion-item">
+								<div class="accordion-header card card-default" id="headingSingle">
+									<div class="card-header accordion-button" data-bs-toggle="collapse" data-bs-parent="#accordion" data-bs-target="#collapseSingle" aria-expanded="false" aria-controls="collapseSingle">
+										<svg data-src="svg/light_source.svg" width="18" height="18" fill="currentColor" class="svg4hyperhdr"></svg><span data-i18n="conf_leds_layout_single">Single color (whole screen)</span>
+									</div>
+								</div>
+								<div id="collapseSingle" class="accordion-collapse card collapse" aria-labelledby="headingSingle" data-bs-parent="#accordion">
+									<div class="card-body">
+										<div class="container">
+											<div class="row form-group">
+												<div class="col-12 col-form-label mb-3" data-i18n="conf_leds_layout_single_expl">All LEDs share one whole-screen zone, so the entire strip shows a single scene color. Pair with the "Multicolor ambient" or "Unicolor" processing mode. Set the count to your strip's LED count; use the "group" LED device to drive two strips with the same color.</div>
+											</div>
+											<div class="row form-group">
+												<div class="col-4 col-form-label mb-3">
+													<label class="ltdlabel" for="ip_sg_count" data-i18n="conf_leds_layout_single_count">LED count</label>
+												</div>
+												<div class="col-8">
+													<div class="input-group">
+														<input class="form-control ledSGconstr" id="ip_sg_count" type="number" value="1" min="1" step="1" />
+														<div class="input-group-append">
+															<span data-i18n="edt_append_leds" class="input-group-text">LEDs</span>
+														</div>
+														<div class="input-group-append">
+															<button type="button" class="btn btn-secondary stepper-down">-</button>
+														</div>
+														<div class="input-group-append">
+															<button type="button" class="btn btn-secondary stepper-up">+</button>
+														</div>
+													</div>
+												</div>
+											</div>
+										</div>
+									</div>
+									<div class="card-footer" style="text-align: right;">
+										<button id="btn_sg_save" class="btn btn-primary"><svg data-src="svg/button_save.svg" fill="currentColor" class="svg4hyperhdr"></svg><span data-i18n="conf_leds_layout_button_savelay">Save layout</span></button>
+									</div>
+								</div>
+							</div>
+							<div id="texfield_panel" class="accordion-item">
 							<div class="accordion-header card card-default" id="headingThree">								
 								<div class="card-header accordion-button" data-bs-toggle="collapse" data-bs-parent="#accordion" data-bs-target="#collapse4" aria-expanded="false" aria-controls="collapse4">
 									<svg data-src="svg/general_settings.svg" width="18" height="18" fill="currentColor" class="svg4hyperhdr"></svg><span data-i18n="conf_leds_layout_generatedconf">Generated/Actual LED Configuration</span>

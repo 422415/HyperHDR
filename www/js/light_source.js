@@ -569,6 +569,19 @@ function createMatrixLeds()
 	createLedPreview(finalLedArray, 'matrix');
 }
 
+// Single whole-screen color: N LEDs that all share one full-frame zone (group 1),
+// so the entire strip shows one scene color. The group master processes the whole
+// frame once and the rest copy it (efficient). Pair with the "advanced_ambient" or
+// "unicolor_mean" processing mode.
+function createSingleLed()
+{
+	var count = Math.max(1, parseInt($("#ip_sg_count").val()) || 1);
+	finalLedArray = [];
+	for (var i = 0; i < count; i++)
+		finalLedArray.push({ hmin: 0, hmax: 1, vmin: 0, vmax: 1, group: 1 });
+	createLedPreview(finalLedArray, 'text');
+}
+
 function isEmpty(obj)
 {
 	for (var key in obj)
@@ -658,6 +671,12 @@ $(document).ready(function()
 	{
 		valValue(this.id, this.value, this.min, this.max);
 		createMatrixLeds();
+	});
+
+	$('.ledSGconstr').bind("change", function()
+	{
+		valValue(this.id, this.value, this.min, this.max);
+		createSingleLed();
 	});
 
 	// v4 of json schema with diff required assignment
@@ -958,6 +977,17 @@ $(document).ready(function()
 	// save led config and saveValues - passing textfield
 	$("#btn_ma_save, #btn_cl_save").off().on("click", function()
 	{
+		requestWriteConfig(
+		{
+			"leds": finalLedArray
+		});
+		saveValues();
+	});
+
+	// single whole-screen color: (re)generate from the count, then save
+	$("#btn_sg_save").off().on("click", function()
+	{
+		createSingleLed();
 		requestWriteConfig(
 		{
 			"leds": finalLedArray
