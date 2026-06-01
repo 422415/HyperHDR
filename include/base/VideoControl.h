@@ -42,6 +42,7 @@ private:
 	bool	_isCEC;
 	bool	_vapoursynthMode;
 	bool	_videoInstanceEnable;
+	bool	_videoSettingsLoaded;
 
 	struct {
 		QMutex mutex;

@@ -48,6 +48,7 @@ VideoControl::VideoControl(HyperHdrInstance* hyperhdr)
 	, _isCEC(false)
 	, _vapoursynthMode(false)
 	, _videoInstanceEnable(true)
+	, _videoSettingsLoaded(false)
 {
 	// settings changes
 	connect(_hyperhdr, &HyperHdrInstance::SignalInstanceSettingsChanged, this, &VideoControl::handleSettingsUpdate);
@@ -163,6 +164,7 @@ void VideoControl::handleSettingsUpdate(settings::type type, const QJsonDocument
 		}
 
 		_videoInstanceEnable = obj["videoInstanceEnable"].toBool(true);
+		_videoSettingsLoaded = true;
 		// External (VapourSynth/mpv) capture forces the USB grabber off for this instance.
 		setUsbCaptureEnable(_videoInstanceEnable && !_vapoursynthMode);
 		_isCEC = obj["cecControl"].toBool(false);
@@ -173,7 +175,10 @@ void VideoControl::handleSettingsUpdate(settings::type type, const QJsonDocument
 		// The "VapourSynth/mpv" capture toggle lives in the system-control settings; honor it here
 		// too so selecting it also disables the USB grabber (and re-enables it when cleared).
 		_vapoursynthMode = config.object()["vapoursynthMode"].toBool(false);
-		setUsbCaptureEnable(_videoInstanceEnable && !_vapoursynthMode);
+		// Only act once our own (VIDEOCONTROL) settings -- including the priority -- have loaded,
+		// so an early system-control event can't register USB capture at an unset priority.
+		if (_videoSettingsLoaded)
+			setUsbCaptureEnable(_videoInstanceEnable && !_vapoursynthMode);
 	}
 }
 
