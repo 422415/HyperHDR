@@ -111,20 +111,25 @@ true HDR tone‑map, so very bright HDR highlights clip to white — fine for am
 color, but if you want exact highlight rolloff we can add a `vs-placebo` tone‑map
 node later. (Re‑drop the updated `ambient.py` to get this fix — no HyperHDR build.)
 
-**Lights don't hold the last color when you pause / lots of flicker.** Both are the
-**screen grabber stealing priority**, not the tap:
-- The MPV feed registers at priority 150. If HyperHDR's system/USB grabber is still
-  running (priority ~250), it takes over in the gaps — and the moment you pause and
-  frames stop, it grabs the light and changes it.
-- **Fix:** turn the grabber OFF — tick **System Control → VapourSynth/mpv capture**
-  (which disables both grabbers), or disable USB/screen capture under Capturing.
-  With nothing else competing, the last sent frame holds while paused.
+**Lights don't hold the last color when you pause.** HyperHDR's flatbuffer server
+drops a connection after a **5 s idle timeout** and clears its priority — so when
+mpv pauses and frames stop, the lights fall back after 5 s. `ambient.py` now runs a
+**background keepalive** that resends the last frame every ~1.5 s, keeping the
+priority alive through a pause. (Re‑drop the updated `ambient.py`.) Also turn the
+screen grabber OFF — **System Control → VapourSynth/mpv capture** — so nothing
+lower‑priority is waiting to repaint the lights.
 
-**Still flickering with the grabber off.** That's HyperHDR‑side mapping/smoothing:
-- Set the LED mapping mode to **`advanced_ambient`** (the stable estimator), not a
-  per‑frame dominant mode.
-- Turn **Smoothing** on (LED Output → Smoothing, ~200 ms). Without it, every frame's
-  color goes straight to the LEDs.
+**HyperHDR freezes / lights stop updating until you restart it.** The tap used a
+**blocking send with no timeout**: if HyperHDR ever backed up (e.g. its WiFi write
+to the Penta stalled), the send blocked forever and wedged the mpv frame thread.
+The updated `ambient.py` adds a **send timeout + failure cooldown** — a stalled
+HyperHDR can no longer block playback; frames are dropped and the link reconnects
+off‑thread. (Re‑drop the updated `ambient.py`.)
+
+**Flicker.** With analog COB there's no hardware flicker, so it's the values
+changing: set the LED mapping mode to **`advanced_ambient`** (the stable estimator),
+turn **Smoothing** on (LED Output → Smoothing, ~200 ms), and make sure the grabber
+is off so it isn't bouncing with the tap.
 
 ### Notes
 - The tap downscales to 256 px (plenty for LED mapping) and sends synchronously in

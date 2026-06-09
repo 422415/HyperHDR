@@ -26,6 +26,8 @@ from __future__ import annotations
 import os
 import socket
 import struct
+import threading
+import time
 
 # FlatBuffers command/union enum values (hyperhdr_request.fbs declaration order).
 _CMD_IMAGE = 2
@@ -177,44 +179,127 @@ def _frame(payload):
 # swallowed by the caller so playback is never affected.
 # ---------------------------------------------------------------------------
 class _Client:
-    def __init__(self, host, port, priority, origin):
-        self.host, self.port, self.priority, self.origin = host, port, priority, origin
-        self.sock = None
+    """Blocking flatbuffers client, hardened so it can never wedge mpv and so the
+    color survives a pause:
 
-    def _connect(self):
-        s = socket.create_connection((self.host, self.port), 5.0)
+    * **send timeout** -- a stalled HyperHDR can never block the mpv frame thread
+      for more than ``send_timeout``; the frame is dropped instead.
+    * **failure cooldown** -- after a failed send the mpv thread stops trying for
+      ``cooldown`` seconds (returns immediately); all (re)connecting happens off
+      the mpv thread in ``keepalive()``.
+    * **keepalive** -- ``keepalive()`` (driven by a background thread) resends the
+      last frame when the link goes idle, so HyperHDR's 5 s flatbuffer idle timeout
+      doesn't disconnect us and drop the priority while playback is paused.
+    """
+
+    def __init__(self, host, port, priority, origin, send_timeout=1.0, cooldown=3.0):
+        self.host, self.port, self.priority, self.origin = host, port, priority, origin
+        self.send_timeout = send_timeout
+        self.cooldown = cooldown
+        self.sock = None
+        self._lock = threading.Lock()
+        self._last_frame = None
+        self._last_send = 0.0
+        self._cooldown_until = 0.0
+
+    # -- the _locked helpers must be called while holding self._lock --
+    def _connect_locked(self):
+        s = socket.create_connection((self.host, self.port), 3.0)
         s.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+        s.settimeout(self.send_timeout)
         s.sendall(_frame(_encode_register(self.origin, self.priority)))
-        s.settimeout(2.0)
         try:
             s.recv(4096)   # consume the Register reply (content unused)
         except OSError:
             pass
-        s.settimeout(None)
         self.sock = s
 
-    def send_image(self, rgb_bytes, width, height):
-        if self.sock is None:
-            self._connect()
-        self.sock.sendall(_frame(_encode_image(rgb_bytes, width, height)))
-        # drain any per-image reply so the OS buffer cannot fill
-        self.sock.setblocking(False)
-        try:
-            while self.sock.recv(4096):
-                pass
-        except OSError:
-            pass
-        finally:
-            if self.sock is not None:
-                self.sock.setblocking(True)
-
-    def reset(self):
+    def _reset_locked(self):
         try:
             if self.sock is not None:
                 self.sock.close()
         except OSError:
             pass
         self.sock = None
+        self._cooldown_until = time.monotonic() + self.cooldown
+
+    def _send_locked(self, framed):
+        try:
+            self.sock.settimeout(self.send_timeout)
+            self.sock.sendall(framed)
+            self.sock.setblocking(False)
+            try:
+                while self.sock.recv(4096):   # drain replies; never let OS buffer fill
+                    pass
+            except OSError:
+                pass
+            self._last_send = time.monotonic()
+        except OSError:
+            self._reset_locked()
+
+    def send_image(self, rgb_bytes, width, height):
+        """Called synchronously from the mpv frame thread -- must not block on
+        connect, and never longer than send_timeout."""
+        framed = _frame(_encode_image(rgb_bytes, width, height))
+        with self._lock:
+            self._last_frame = framed
+            if self.sock is None or time.monotonic() < self._cooldown_until:
+                return   # outage: drop this frame, keepalive() reconnects off-thread
+            self._send_locked(framed)
+
+    def keepalive(self):
+        """Background thread: (re)connect if needed and resend the last frame when
+        the link has gone idle, so the priority survives a pause."""
+        with self._lock:
+            now = time.monotonic()
+            if self.sock is None:
+                if now < self._cooldown_until:
+                    return
+                try:
+                    self._connect_locked()
+                    if self._last_frame is not None:
+                        self._send_locked(self._last_frame)
+                except OSError:
+                    self._reset_locked()
+                return
+            if self._last_frame is not None and (now - self._last_send) >= 1.5:
+                self._send_locked(self._last_frame)
+
+    def reset(self):
+        with self._lock:
+            self._reset_locked()
+
+
+def _start_keepalive(client, interval=1.0):
+    def _loop():
+        while True:
+            try:
+                time.sleep(interval)
+                client.keepalive()
+            except Exception:
+                pass
+    threading.Thread(target=_loop, name="ambient-keepalive", daemon=True).start()
+
+
+# One client (and one keepalive thread / connection) per host:port, reused across
+# profile switches so we never open duplicate connections that fight at the same
+# priority.
+_CLIENTS = {}
+
+
+def _get_client(host, port, priority, origin):
+    key = (host, port)
+    client = _CLIENTS.get(key)
+    if client is None:
+        client = _Client(host, port, priority, origin)
+        _CLIENTS[key] = client
+        try:
+            with client._lock:
+                client._connect_locked()
+        except OSError:
+            client.reset()
+        _start_keepalive(client)
+    return client
 
 
 def _is_enabled(config):
@@ -292,7 +377,7 @@ def attach_ambient(clip, container_fps, host=None, port=None,
 
     tap = core.resize.Bilinear(clip, **kw)
 
-    client = _Client(host, port, priority, origin)
+    client = _get_client(host, port, priority, origin)
 
     def _selector(n, f):
         try:
@@ -300,7 +385,7 @@ def attach_ambient(clip, container_fps, host=None, port=None,
             arr = np.stack([np.asarray(tf[i]) for i in range(3)], axis=-1).astype(np.uint8)
             client.send_image(np.ascontiguousarray(arr).tobytes(), tw, th)
         except Exception:
-            client.reset()   # reconnect next frame; never break playback
+            pass   # never break playback; the client manages its own connection
         return f[0]
 
     return clip.std.ModifyFrame(clips=[clip, tap], selector=_selector)
