@@ -102,9 +102,34 @@ Select a mapping mode (e.g. `advanced_ambient` or `unicolor_mean`) and tick
 **System Control → VapourSynth/mpv capture** so the screen grabber stays off. The
 feed registers at priority 150, which outranks the grabber anyway.
 
+## Troubleshooting
+
+**Color is completely off / dull (HDR sources).** The tap now reads the clip's own
+color tags and converts BT.2020/PQ/HLG → SDR 709 automatically, so HDR anime no
+longer streams as garbled SDR. It does a straight transfer conversion, **not** a
+true HDR tone‑map, so very bright HDR highlights clip to white — fine for ambient
+color, but if you want exact highlight rolloff we can add a `vs-placebo` tone‑map
+node later. (Re‑drop the updated `ambient.py` to get this fix — no HyperHDR build.)
+
+**Lights don't hold the last color when you pause / lots of flicker.** Both are the
+**screen grabber stealing priority**, not the tap:
+- The MPV feed registers at priority 150. If HyperHDR's system/USB grabber is still
+  running (priority ~250), it takes over in the gaps — and the moment you pause and
+  frames stop, it grabs the light and changes it.
+- **Fix:** turn the grabber OFF — tick **System Control → VapourSynth/mpv capture**
+  (which disables both grabbers), or disable USB/screen capture under Capturing.
+  With nothing else competing, the last sent frame holds while paused.
+
+**Still flickering with the grabber off.** That's HyperHDR‑side mapping/smoothing:
+- Set the LED mapping mode to **`advanced_ambient`** (the stable estimator), not a
+  per‑frame dominant mode.
+- Turn **Smoothing** on (LED Output → Smoothing, ~200 ms). Without it, every frame's
+  color goes straight to the LEDs.
+
 ### Notes
 - The tap downscales to 256 px (plenty for LED mapping) and sends synchronously in
   the frame callback. Synchronous matters: a background thread dies silently inside
   mpv's VapourSynth worker context — that was the cause of the earlier "no output".
-- HDR caveat: mpv tone‑maps after VapourSynth, so for HDR sources the streamed
-  colors are scene‑referred. For SDR anime this is correct as‑is.
+- The tap is **pre‑tone‑map** (mpv tone‑maps at the vo stage, after VapourSynth), so
+  colors are scene‑referred. For SDR and now HDR sources the conversion above makes
+  this match closely enough for ambient light.

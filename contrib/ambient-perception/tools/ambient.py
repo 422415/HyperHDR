@@ -264,10 +264,33 @@ def attach_ambient(clip, container_fps, host=None, port=None,
     host = host or os.environ.get("AMBIENT_HOST", "127.0.0.1")
     port = int(port or os.environ.get("AMBIENT_PORT", "19400"))
 
-    cs = "170m" if clip.height < 720 else "709"
     tw = min(int(downscale), clip.width)
     th = max(2, round(clip.height * tw / clip.width))
-    tap = core.resize.Bilinear(clip, width=tw, height=th, format=vs.RGB24, matrix_in_s=cs)
+
+    # Convert to SDR full-range RGB24 using the clip's OWN color tags, so the
+    # streamed color matches what's on screen -- crucially including HDR sources
+    # (BT.2020 / PQ / HLG), which look completely wrong if assumed to be SDR 709.
+    # We probe frame 0's props; whatever is tagged (matrix/transfer/primaries/range)
+    # is read per-frame by resize and converted to 709 full-range. Anything left
+    # "unspecified" (==2) or untagged falls back to a sane SDR default.
+    try:
+        props = dict(clip.get_frame(0).props)
+    except Exception:
+        props = {}
+
+    is_yuv = clip.format.color_family == vs.YUV
+    kw = dict(width=tw, height=th, format=vs.RGB24, dither_type="error_diffusion",
+              transfer_s="709", primaries_s="709", range_s="full")
+    if is_yuv and props.get("_Matrix", 2) == 2:
+        kw["matrix_in_s"] = "709" if clip.height >= 720 else "170m"
+    if props.get("_Transfer", 2) == 2:
+        kw["transfer_in_s"] = "709"
+    if props.get("_Primaries", 2) == 2:
+        kw["primaries_in_s"] = "709"
+    if "_ColorRange" not in props:
+        kw["range_in_s"] = "limited" if is_yuv else "full"
+
+    tap = core.resize.Bilinear(clip, **kw)
 
     client = _Client(host, port, priority, origin)
 
